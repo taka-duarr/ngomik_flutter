@@ -1,14 +1,12 @@
 import 'package:flutter/foundation.dart';
 import '../models/reading_history.dart';
 import '../services/shngm_api_service.dart';
-import '../services/storage_service.dart';
 
 class HistoryProvider with ChangeNotifier {
   final ShngmApiService _apiService = ShngmApiService();
-  final StorageService _storageService = StorageService();
 
   List<ReadingHistoryItem> _history = [];
-  Map<String, String> _readChapters = {};
+  final Map<String, String> _readChapters = {};
   bool _isLoading = false;
 
   List<ReadingHistoryItem> get history => _history;
@@ -16,8 +14,8 @@ class HistoryProvider with ChangeNotifier {
   bool get isLoading => _isLoading;
 
   Future<void> init({String? token}) async {
-    _history = await _storageService.getHistory();
-    _readChapters = await _storageService.getReadChapters();
+    _history.clear();
+    _readChapters.clear();
     notifyListeners();
 
     if (token != null && token.isNotEmpty) {
@@ -26,6 +24,7 @@ class HistoryProvider with ChangeNotifier {
   }
 
   bool isChapterRead(String chapterId) {
+    if (chapterId.isEmpty) return false;
     return _readChapters.containsKey(chapterId);
   }
 
@@ -44,29 +43,36 @@ class HistoryProvider with ChangeNotifier {
 
     try {
       final remoteList = await _apiService.fetchUserHistory(token);
-      if (remoteList.isNotEmpty) {
-        // Remote entries take priority to overwrite any old 0-chapter cached entries
-        final Map<String, ReadingHistoryItem> map = {};
-        for (final item in _history) {
-          map[item.mangaId] = item;
+      _history = remoteList;
+      for (final item in remoteList) {
+        if (item.chapterId.isNotEmpty && item.chapterId != '0') {
+          _readChapters[item.chapterId] = item.mangaId;
         }
-        for (final item in remoteList) {
-          map[item.mangaId] = item;
-          if (item.chapterId.isNotEmpty) {
-            _readChapters[item.chapterId] = item.mangaId;
-          }
-        }
-
-        final merged = map.values.toList();
-        merged.sort((a, b) => b.readAt.compareTo(a.readAt));
-        _history = merged.take(100).toList();
-        await _storageService.saveHistory(_history);
       }
     } catch (e) {
       debugPrint('Error syncRemoteHistory: $e');
     } finally {
       _isLoading = false;
       notifyListeners();
+    }
+  }
+
+  Future<void> syncMangaChapterHistory(String mangaId, String token) async {
+    if (token.isEmpty) return;
+    try {
+      final readIds = await _apiService.fetchMangaChapterHistory(mangaId, token);
+      if (readIds.isNotEmpty) {
+        bool hasNew = false;
+        for (final chId in readIds) {
+          if (!_readChapters.containsKey(chId)) {
+            _readChapters[chId] = mangaId;
+            hasNew = true;
+          }
+        }
+        if (hasNew) notifyListeners();
+      }
+    } catch (e) {
+      debugPrint('Error syncMangaChapterHistory: $e');
     }
   }
 
@@ -94,30 +100,35 @@ class HistoryProvider with ChangeNotifier {
     _history.removeWhere((h) => h.mangaId == mangaId);
     _history.insert(0, item);
     _readChapters[chapterId] = mangaId;
-    await _storageService.saveHistory(_history);
-    await _storageService.markChapterRead(chapterId, mangaId);
     notifyListeners();
 
-    // Direct save to Shinigami Database via API if logged in
+    // Directly record to server API
     if (token != null && token.isNotEmpty) {
-      _apiService.addHistory(token, mangaId, chapterId);
+      await _apiService.addHistory(token, mangaId, chapterId);
+    }
+  }
+
+  Future<void> removeHistory(String mangaId, {String? token}) async {
+    _history.removeWhere((h) => h.mangaId == mangaId);
+    _readChapters.removeWhere((_, mId) => mId == mangaId);
+    notifyListeners();
+
+    if (token != null && token.isNotEmpty) {
+      await _apiService.removeHistory(token, mangaId);
     }
   }
 
   Future<void> removeHistoryItem(String mangaId, {String? token}) async {
-    _history.removeWhere((h) => h.mangaId == mangaId);
-    await _storageService.saveHistory(_history);
-    notifyListeners();
-
-    if (token != null && token.isNotEmpty) {
-      _apiService.removeHistory(token, mangaId);
-    }
+    await removeHistory(mangaId, token: token);
   }
 
-  Future<void> clearHistory() async {
+  Future<void> clearAllHistory({String? token}) async {
     _history.clear();
     _readChapters.clear();
-    await _storageService.saveHistory([]);
     notifyListeners();
+  }
+
+  Future<void> clearHistory({String? token}) async {
+    await clearAllHistory(token: token);
   }
 }

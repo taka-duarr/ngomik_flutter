@@ -7,6 +7,7 @@ import 'package:ngomik_flutter/widgets/hero_carousel.dart';
 import 'package:ngomik_flutter/widgets/coverflow_slider.dart';
 import 'package:ngomik_flutter/widgets/manga_card.dart';
 import 'package:ngomik_flutter/widgets/app_network_image.dart';
+import 'package:ngomik_flutter/widgets/google_dots_loading.dart';
 import 'package:ngomik_flutter/screens/auth/login_screen.dart';
 import 'package:ngomik_flutter/screens/settings/settings_screen.dart';
 
@@ -68,7 +69,7 @@ class _HomeScreenState extends State<HomeScreen> {
           builder: (context, provider, child) {
             if (provider.isLoadingHome && provider.heroManga.isEmpty) {
               return const Center(
-                child: CircularProgressIndicator(color: AppColors.primary),
+                child: GoogleDotsLoading(dotSize: 13, jumpHeight: 18),
               );
             }
 
@@ -261,8 +262,8 @@ class _HomeScreenState extends State<HomeScreen> {
                     if (provider.isLoadingFiltered)
                       const SliverToBoxAdapter(
                         child: Padding(
-                          padding: EdgeInsets.all(40),
-                          child: Center(child: CircularProgressIndicator(color: AppColors.primary)),
+                          padding: EdgeInsets.symmetric(vertical: 50),
+                          child: Center(child: GoogleDotsLoading(dotSize: 11, jumpHeight: 14)),
                         ),
                       )
                     else ...[
@@ -423,11 +424,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           child: Padding(
                             padding: EdgeInsets.symmetric(vertical: 24),
                             child: Center(
-                              child: SizedBox(
-                                width: 26,
-                                height: 26,
-                                child: CircularProgressIndicator(strokeWidth: 2.5, color: AppColors.primary),
-                              ),
+                              child: GoogleDotsLoading(dotSize: 9, spacing: 6, jumpHeight: 10),
                             ),
                           ),
                         ),

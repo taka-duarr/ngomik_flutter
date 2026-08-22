@@ -340,27 +340,154 @@ class ShngmApiService {
     }
   }
 
-  Future<List<WalineComment>> fetchComments(String path, {int page = 1, int pageSize = 20}) async {
+  Future<Map<String, dynamic>?> fetchHistoryByManga(String mangaId, String token) async {
     try {
-      final queryParams = {
-        'path': path,
-        'page': page.toString(),
-        'pageSize': pageSize.toString(),
-      };
-      final uri = Uri.parse(ApiEndpoints.walineComments).replace(queryParameters: queryParams);
-      final response = await _client.get(uri);
-
+      final uri = Uri.parse(ApiEndpoints.historyGetByManga(mangaId));
+      final response = await _client.get(uri, headers: ApiEndpoints.defaultHeaders(token: token));
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        final list = data['data'] ?? [];
-        if (list is List) {
-          return list.map((c) => WalineComment.fromJson(c as Map<String, dynamic>)).toList();
-        }
+        return data['data'] is Map<String, dynamic> ? data['data'] as Map<String, dynamic> : null;
       }
-      return [];
+      return null;
+    } catch (e) {
+      debugPrint('Error fetchHistoryByManga: $e');
+      return null;
+    }
+  }
+
+  Future<List<String>> fetchMangaChapterHistory(
+    String mangaId,
+    String token, {
+    int pageSize = 50,
+  }) async {
+    final List<String> readIds = [];
+    int page = 1;
+    int totalPages = 1;
+
+    try {
+      do {
+        final uri = Uri.parse(
+          '${ApiEndpoints.chapterHistory(mangaId)}?page=$page&page_size=$pageSize&sort_by=chapter_number&sort_order=desc',
+        );
+        final response = await _client.get(
+          uri,
+          headers: ApiEndpoints.defaultHeaders(token: token),
+        );
+        if (response.statusCode == 200) {
+          final data = jsonDecode(response.body);
+          final meta = data['meta'] as Map<String, dynamic>?;
+          totalPages = meta?['total_page'] is int
+              ? meta!['total_page'] as int
+              : int.tryParse(meta?['total_page']?.toString() ?? '') ?? 1;
+
+          final list = data['data'] ?? [];
+          if (list is List) {
+            for (final item in list) {
+              if (item is Map && item['is_read'] == true) {
+                final chId = (item['chapter_id'] ?? '').toString();
+                if (chId.isNotEmpty && chId != 'null') {
+                  readIds.add(chId);
+                }
+              }
+            }
+          }
+        } else {
+          break;
+        }
+        page++;
+      } while (page <= totalPages);
+    } catch (e) {
+      debugPrint('Error fetchMangaChapterHistory: $e');
+    }
+    return readIds;
+  }
+
+  Future<CommentPageResult> fetchComments(
+    String path, {
+    int page = 1,
+    int pageSize = 15,
+    String sortBy = 'like_desc',
+  }) async {
+    try {
+      final cleanPath = path.startsWith('/') ? path.substring(1) : path;
+      final queryParams = {
+        'path': cleanPath,
+        'page': page.toString(),
+        'pageSize': pageSize.toString(),
+        'lang': 'en',
+        'sortBy': sortBy,
+      };
+      final uri = Uri.parse(ApiEndpoints.walineComments).replace(queryParameters: queryParams);
+      final response = await _client.get(uri, headers: ApiEndpoints.defaultHeaders());
+
+      if (response.statusCode == 200) {
+        final resJson = jsonDecode(response.body);
+        final dataObj = resJson['data'];
+        List<WalineComment> comments = [];
+        int count = 0;
+        int totalPages = 1;
+
+        if (dataObj is Map) {
+          count = int.tryParse(dataObj['count']?.toString() ?? '0') ?? 0;
+          totalPages = int.tryParse(dataObj['totalPages']?.toString() ?? '1') ?? 1;
+          final list = dataObj['data'] ?? [];
+          if (list is List) {
+            comments = list
+                .whereType<Map<String, dynamic>>()
+                .map((c) => WalineComment.fromJson(c))
+                .toList();
+          }
+        } else if (dataObj is List) {
+          comments = dataObj
+              .whereType<Map<String, dynamic>>()
+              .map((c) => WalineComment.fromJson(c))
+              .toList();
+          count = comments.length;
+        }
+
+        return CommentPageResult(
+          comments: comments,
+          page: page,
+          totalPages: totalPages,
+          totalRecords: count,
+        );
+      }
+      return const CommentPageResult(comments: [], page: 1, totalPages: 1, totalRecords: 0);
     } catch (e) {
       debugPrint('Error fetchComments: $e');
-      return [];
+      return const CommentPageResult(comments: [], page: 1, totalPages: 1, totalRecords: 0);
+    }
+  }
+
+  Future<bool> postComment({
+    required String path,
+    required String comment,
+    required String nick,
+    String? mail,
+    String? link,
+  }) async {
+    try {
+      final cleanPath = path.startsWith('/') ? path.substring(1) : path;
+      final uri = Uri.parse(ApiEndpoints.walineComments);
+      final body = {
+        'path': cleanPath,
+        'comment': comment,
+        'nick': nick,
+        'mail': mail ?? '',
+        'link': link ?? '',
+        'ua': 'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
+      };
+
+      final response = await _client.post(
+        uri,
+        headers: ApiEndpoints.defaultHeaders(token: null),
+        body: jsonEncode(body),
+      );
+
+      return response.statusCode == 200 || response.statusCode == 201;
+    } catch (e) {
+      debugPrint('Error postComment: $e');
+      return false;
     }
   }
 }

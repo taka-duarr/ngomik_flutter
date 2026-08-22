@@ -10,6 +10,7 @@ class Manga {
   final String synopsis;
   final String status;
   final String type; // Manhwa, Manga, Manhua
+  final String? author;
   final List<String> genres;
   final String? latestChapter;
   final String? latestChapterId;
@@ -30,6 +31,7 @@ class Manga {
     this.synopsis = '',
     this.status = 'Ongoing',
     this.type = 'Manhwa',
+    this.author,
     this.genres = const [],
     this.latestChapter,
     this.latestChapterId,
@@ -142,6 +144,17 @@ class Manga {
       }
     }
 
+    // Parse Author
+    String? author;
+    if (json['author'] != null && json['author'].toString().isNotEmpty) {
+      author = json['author'].toString();
+    } else if (json['taxonomy'] is Map && (json['taxonomy'] as Map)['Author'] is List) {
+      final authList = (json['taxonomy'] as Map)['Author'] as List;
+      if (authList.isNotEmpty && authList[0] is Map && authList[0]['name'] != null) {
+        author = authList[0]['name'].toString();
+      }
+    }
+
     // Parse genres from genres list or taxonomy.Genre
     List<String> genresList = [];
     if (json['genres'] is List) {
@@ -183,6 +196,7 @@ class Manga {
       synopsis: synopsis,
       status: status,
       type: type,
+      author: author,
       genres: genresList,
       latestChapter: latestCh,
       latestChapterId: latestChId,
@@ -206,6 +220,7 @@ class Manga {
         'synopsis': synopsis,
         'status': status,
         'type': type,
+        'author': author,
         'genres': genres,
         'latest_chapter_number': latestChapter,
         'latest_chapter_id': latestChapterId,
@@ -227,6 +242,7 @@ class Manga {
     String? synopsis,
     String? status,
     String? type,
+    String? author,
     List<String>? genres,
     String? latestChapter,
     String? latestChapterId,
@@ -247,6 +263,7 @@ class Manga {
       synopsis: synopsis ?? this.synopsis,
       status: status ?? this.status,
       type: type ?? this.type,
+      author: author ?? this.author,
       genres: genres ?? this.genres,
       latestChapter: latestChapter ?? this.latestChapter,
       latestChapterId: latestChapterId ?? this.latestChapterId,

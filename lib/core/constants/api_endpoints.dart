@@ -21,6 +21,7 @@ class ApiEndpoints {
   static String mangaDetail(String mangaId) => '$baseUrl/v1/manga/detail/$mangaId';
   static String chapterList(String mangaId) => '$baseUrl/v1/chapter/$mangaId/list';
   static String chapterDetail(String chapterId) => '$baseUrl/v1/chapter/detail/$chapterId';
+  static String chapterHistory(String mangaId) => '$baseUrl/v1/chapter/$mangaId/history';
 
   // User & Profile
   static String get userDetail => '$baseUrl/v1/user/detail';
@@ -33,6 +34,7 @@ class ApiEndpoints {
 
   // Reading History
   static String get historyList => '$baseUrl/v1/history/list/manga';
+  static String historyGetByManga(String mangaId) => '$baseUrl/v1/history/get-by-manga/$mangaId';
   static String get historyAdd => '$baseUrl/v1/history/add';
   static String get historyRemove => '$baseUrl/v1/history/remove';
 

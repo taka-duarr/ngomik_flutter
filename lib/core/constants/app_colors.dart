@@ -9,11 +9,11 @@ class AppColors {
   static const Color card = Color(0xFF131826);
   static const Color cardLighter = Color(0xFF1B2237);
 
-  // Neon Brand Accents
-  static const Color primary = Color(0xFFFF2E63); // Vibrant Neon Crimson / Hot Pink
-  static const Color primaryDark = Color(0xFFD61A4E);
-  static const Color primaryLight = Color(0xFFFF5E85);
-  static const Color primaryGlow = Color(0x66FF2E63);
+  // Ultra-Vivid Electric Neon Crimson Red Accents
+  static const Color primary = Color(0xFFFF0055); // Super Vivid Electric Neon Crimson Red
+  static const Color primaryDark = Color(0xFFD50032);
+  static const Color primaryLight = Color(0xFFFF3366);
+  static const Color primaryGlow = Color(0x80FF0055);
 
   // Neon Accents
   static const Color cyan = Color(0xFF00E5FF); // Electric Cyan
@@ -33,7 +33,7 @@ class AppColors {
   // Borders & Glows
   static const Color border = Color(0x1FFFFFFF);
   static const Color borderSubtle = Color(0x0FFFFFFF);
-  static const Color borderGlow = Color(0x4DFF2E63);
+  static const Color borderGlow = Color(0x66FF0055);
 
   // Floating Nav Colors
   static const Color navBackground = Color(0xEB0D121F);
@@ -41,13 +41,13 @@ class AppColors {
 
   // Gradients
   static const LinearGradient primaryGradient = LinearGradient(
-    colors: [Color(0xFFFF2E63), Color(0xFFD61A4E)],
+    colors: [Color(0xFFFF0055), Color(0xFFFF2A6D)],
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
   );
 
   static const LinearGradient neonPinkGradient = LinearGradient(
-    colors: [Color(0xFFFF3366), Color(0xFFE11D48)],
+    colors: [Color(0xFFFF0055), Color(0xFFE11D48)],
     begin: Alignment.topCenter,
     end: Alignment.bottomCenter,
   );
@@ -65,7 +65,7 @@ class AppColors {
 
   static const LinearGradient cardGlowGradient = LinearGradient(
     colors: [
-      Color(0x26FF2E63),
+      Color(0x33FF0055),
       Color(0x050D111A),
     ],
     begin: Alignment.topLeft,

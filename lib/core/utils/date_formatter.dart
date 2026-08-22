@@ -6,7 +6,16 @@ class DateFormatter {
   static String timeAgo(String? dateStr) {
     if (dateStr == null || dateStr.isEmpty) return '';
     try {
-      final date = DateTime.parse(dateStr).toLocal();
+      DateTime date;
+      final millis = int.tryParse(dateStr);
+      if (millis != null) {
+        date = millis < 10000000000
+            ? DateTime.fromMillisecondsSinceEpoch(millis * 1000).toLocal()
+            : DateTime.fromMillisecondsSinceEpoch(millis).toLocal();
+      } else {
+        date = DateTime.parse(dateStr).toLocal();
+      }
+
       final now = DateTime.now();
       final diff = now.difference(date);
 
@@ -25,7 +34,8 @@ class DateFormatter {
         final months = (diff.inDays / 30).floor();
         return '$months bulan lalu';
       } else {
-        return DateFormat('dd MMM yyyy').format(date);
+        final years = (diff.inDays / 365).floor();
+        return years > 0 ? '$years tahun lalu' : DateFormat('dd MMM yyyy').format(date);
       }
     } catch (_) {
       return dateStr;
@@ -35,7 +45,15 @@ class DateFormatter {
   static String formatShortDate(String? dateStr) {
     if (dateStr == null || dateStr.isEmpty) return '';
     try {
-      final date = DateTime.parse(dateStr).toLocal();
+      DateTime date;
+      final millis = int.tryParse(dateStr);
+      if (millis != null) {
+        date = millis < 10000000000
+            ? DateTime.fromMillisecondsSinceEpoch(millis * 1000).toLocal()
+            : DateTime.fromMillisecondsSinceEpoch(millis).toLocal();
+      } else {
+        date = DateTime.parse(dateStr).toLocal();
+      }
       return DateFormat('dd MMM yyyy, HH:mm').format(date);
     } catch (_) {
       return dateStr;

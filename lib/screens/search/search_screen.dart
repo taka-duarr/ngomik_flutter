@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../../core/constants/app_colors.dart';
 import '../../providers/manga_provider.dart';
 import '../../widgets/manga_card.dart';
+import '../../widgets/google_dots_loading.dart';
 
 class SearchScreen extends StatefulWidget {
   const SearchScreen({super.key});
@@ -176,7 +177,7 @@ class _SearchScreenState extends State<SearchScreen> {
               builder: (context, provider, child) {
                 if (provider.isLoadingSearch) {
                   return const Center(
-                    child: CircularProgressIndicator(color: AppColors.primary),
+                    child: GoogleDotsLoading(dotSize: 12, jumpHeight: 16),
                   );
                 }
 
@@ -232,11 +233,7 @@ class _SearchScreenState extends State<SearchScreen> {
                         child: Padding(
                           padding: EdgeInsets.symmetric(vertical: 20),
                           child: Center(
-                            child: SizedBox(
-                              width: 26,
-                              height: 26,
-                              child: CircularProgressIndicator(strokeWidth: 2.5, color: AppColors.primary),
-                            ),
+                            child: GoogleDotsLoading(dotSize: 9, spacing: 6, jumpHeight: 10),
                           ),
                         ),
                       ),

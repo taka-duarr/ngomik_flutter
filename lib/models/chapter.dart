@@ -4,6 +4,7 @@ class Chapter {
   final String chapterNumber;
   final String? chapterTitle;
   final String? releaseDate;
+  final String? thumbnailUrl;
   final int views;
   final bool isRead;
 
@@ -13,6 +14,7 @@ class Chapter {
     required this.chapterNumber,
     this.chapterTitle,
     this.releaseDate,
+    this.thumbnailUrl,
     this.views = 0,
     this.isRead = false,
   });
@@ -25,6 +27,11 @@ class Chapter {
             '0')
         .toString();
 
+    final thumb = json['thumbnail_image_url']?.toString() ??
+        json['thumbnail']?.toString() ??
+        json['image_url']?.toString() ??
+        json['cover_url']?.toString();
+
     return Chapter(
       id: id,
       mangaId: mangaId ?? json['manga_id']?.toString(),
@@ -33,6 +40,7 @@ class Chapter {
       releaseDate: json['release_date']?.toString() ??
           json['created_at']?.toString() ??
           json['published_at']?.toString(),
+      thumbnailUrl: thumb,
       views: int.tryParse(json['view_count']?.toString() ?? '0') ?? 0,
       isRead: isRead,
     );
@@ -44,6 +52,7 @@ class Chapter {
         'chapter_number': chapterNumber,
         'chapter_title': chapterTitle,
         'release_date': releaseDate,
+        'thumbnail_image_url': thumbnailUrl,
         'view_count': views,
         'is_read': isRead,
       };
@@ -55,6 +64,7 @@ class Chapter {
       chapterNumber: chapterNumber,
       chapterTitle: chapterTitle,
       releaseDate: releaseDate,
+      thumbnailUrl: thumbnailUrl,
       views: views,
       isRead: isRead ?? this.isRead,
     );

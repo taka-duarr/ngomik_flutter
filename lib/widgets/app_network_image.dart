@@ -6,6 +6,7 @@ import '../core/constants/api_endpoints.dart';
 class AppNetworkImage extends StatelessWidget {
   final String imageUrl;
   final BoxFit fit;
+  final Alignment alignment;
   final double? width;
   final double? height;
   final Widget? placeholder;
@@ -17,6 +18,7 @@ class AppNetworkImage extends StatelessWidget {
     super.key,
     required this.imageUrl,
     this.fit = BoxFit.cover,
+    this.alignment = Alignment.center,
     this.width,
     this.height,
     this.placeholder,
@@ -36,6 +38,7 @@ class AppNetworkImage extends StatelessWidget {
       imageUrl: cleanUrl,
       httpHeaders: ApiEndpoints.imageHeaders,
       fit: fit,
+      alignment: alignment,
       width: width,
       height: height,
       memCacheWidth: memCacheWidth,
@@ -67,6 +70,7 @@ class AppNetworkImage extends StatelessWidget {
           url,
           headers: ApiEndpoints.imageHeaders,
           fit: fit,
+          alignment: alignment,
           width: width,
           height: height,
           errorBuilder: (context, err, stack) => errorWidget ?? _buildFallback(),

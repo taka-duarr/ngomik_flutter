@@ -3,6 +3,7 @@ import '../core/constants/app_colors.dart';
 import '../core/utils/date_formatter.dart';
 import '../models/chapter.dart';
 import '../models/manga.dart';
+import 'app_network_image.dart';
 import '../screens/reader/reader_screen.dart';
 
 class ChapterListTile extends StatelessWidget {
@@ -19,85 +20,172 @@ class ChapterListTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final title = chapter.chapterTitle != null && chapter.chapterTitle!.isNotEmpty
-        ? 'Chapter ${chapter.chapterNumber} - ${chapter.chapterTitle}'
-        : 'Chapter ${chapter.chapterNumber}';
+    final bgImageUrl = (chapter.thumbnailUrl != null && chapter.thumbnailUrl!.isNotEmpty)
+        ? chapter.thumbnailUrl!
+        : manga.coverUrl;
+
+    final dateText = chapter.releaseDate != null && chapter.releaseDate!.isNotEmpty
+        ? DateFormatter.timeAgo(chapter.releaseDate)
+        : 'Update Terbaru';
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 8),
+      margin: const EdgeInsets.only(bottom: 10),
+      height: 72,
       decoration: BoxDecoration(
-        color: isRead ? AppColors.surface.withValues(alpha: 0.5) : AppColors.card,
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: isRead ? AppColors.border.withValues(alpha: 0.5) : AppColors.border,
+          color: isRead
+              ? AppColors.emerald.withValues(alpha: 0.4)
+              : Colors.white.withValues(alpha: 0.14),
+          width: 0.8,
         ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.35),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
-      child: ListTile(
-        onTap: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (_) => ReaderScreen(
-                chapterId: chapter.id,
-                chapterNumber: chapter.chapterNumber,
-                manga: manga,
+      clipBehavior: Clip.antiAlias,
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          // 1. Chapter Thumbnail Background Image
+          AppNetworkImage(
+            imageUrl: bgImageUrl,
+            fit: BoxFit.cover,
+            errorWidget: Container(color: AppColors.card),
+          ),
+
+          // 2. Dark Horizontal Gradient Overlay for Text Readability
+          Positioned.fill(
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.centerLeft,
+                  end: Alignment.centerRight,
+                  colors: [
+                    Colors.black.withValues(alpha: 0.88),
+                    Colors.black.withValues(alpha: 0.68),
+                    Colors.black.withValues(alpha: 0.30),
+                    Colors.black.withValues(alpha: 0.15),
+                  ],
+                  stops: const [0.0, 0.45, 0.75, 1.0],
+                ),
               ),
             ),
-          );
-        },
-        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 2),
-        dense: true,
-        leading: Container(
-          width: 32,
-          height: 32,
-          decoration: BoxDecoration(
-            color: isRead
-                ? AppColors.emerald.withValues(alpha: 0.15)
-                : AppColors.primary.withValues(alpha: 0.15),
-            borderRadius: BorderRadius.circular(8),
           ),
-          child: Icon(
-            isRead ? Icons.check_circle_outline_rounded : Icons.menu_book_rounded,
-            size: 16,
-            color: isRead ? AppColors.emerald : AppColors.primary,
-          ),
-        ),
-        title: Text(
-          title,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: TextStyle(
-            fontSize: 13,
-            fontWeight: FontWeight.w700,
-            color: isRead ? AppColors.textMuted : AppColors.textPrimary,
-          ),
-        ),
-        subtitle: chapter.releaseDate != null && chapter.releaseDate!.isNotEmpty
-            ? Text(
-                DateFormatter.timeAgo(chapter.releaseDate),
-                style: const TextStyle(
-                  fontSize: 11,
-                  color: AppColors.textDisabled,
-                ),
-              )
-            : null,
-        trailing: isRead
-            ? Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(
-                  color: AppColors.emerald.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(4),
-                ),
-                child: const Text(
-                  'Dibaca',
-                  style: TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.emerald,
+
+          // Extra dark tint for read chapters
+          if (isRead)
+            Positioned.fill(
+              child: Container(
+                color: Colors.black.withValues(alpha: 0.38),
+              ),
+            ),
+
+          // 3. Interactive Content Row
+          Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => ReaderScreen(
+                      chapterId: chapter.id,
+                      chapterNumber: chapter.chapterNumber,
+                      manga: manga,
+                    ),
                   ),
+                );
+              },
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Row(
+                  children: [
+                    // Left: Chapter Number & Release Date
+                    Expanded(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Text(
+                                'Chapter ${chapter.chapterNumber}',
+                                style: const TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w800,
+                                  color: Colors.white,
+                                  letterSpacing: -0.2,
+                                ),
+                              ),
+                              if (isRead) ...[
+                                const SizedBox(width: 6),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.emerald.withValues(alpha: 0.25),
+                                    borderRadius: BorderRadius.circular(4),
+                                    border: Border.all(color: AppColors.emerald, width: 0.6),
+                                  ),
+                                  child: const Text(
+                                    'DIBACA',
+                                    style: TextStyle(
+                                      fontSize: 8.5,
+                                      fontWeight: FontWeight.w900,
+                                      color: AppColors.emerald,
+                                      letterSpacing: 0.4,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                          const SizedBox(height: 3),
+                          Text(
+                            dateText,
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.white.withValues(alpha: 0.7),
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    // Right: Heart Button
+                    Container(
+                      width: 38,
+                      height: 38,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.95),
+                        borderRadius: BorderRadius.circular(10),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.25),
+                            blurRadius: 6,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                      child: const Center(
+                        child: Icon(
+                          Icons.favorite_border_rounded,
+                          color: Color(0xFFE11D48),
+                          size: 19,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-              )
-            : const Icon(Icons.chevron_right_rounded, size: 18, color: AppColors.textMuted),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

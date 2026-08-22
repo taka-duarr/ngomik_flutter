@@ -68,16 +68,16 @@ class _CustomBottomNavState extends State<CustomBottomNav> {
                       height: 52,
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
-                        color: Colors.white,
+                        gradient: AppColors.primaryGradient,
                         boxShadow: [
                           BoxShadow(
-                            color: AppColors.primary.withValues(alpha: 0.5),
-                            blurRadius: 18,
-                            spreadRadius: 2,
-                            offset: const Offset(0, 6),
+                            color: const Color.fromARGB(255, 255, 0, 0).withValues(alpha: 0.7),
+                            blurRadius: 20,
+                            spreadRadius: 3,
+                            offset: const Offset(0, 5),
                           ),
                           BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.35),
+                            color: Colors.black.withValues(alpha: 0.4),
                             blurRadius: 10,
                             offset: const Offset(0, 4),
                           ),
@@ -93,7 +93,7 @@ class _CustomBottomNavState extends State<CustomBottomNav> {
                           child: Icon(
                             _items[widget.currentIndex].icon,
                             key: ValueKey<int>(widget.currentIndex),
-                            color: AppColors.primary,
+                            color: Colors.white,
                             size: 26,
                           ),
                         ),
@@ -135,7 +135,7 @@ class _CustomBottomNavState extends State<CustomBottomNav> {
                                   style: TextStyle(
                                     fontSize: isSelected ? 10.5 : 10,
                                     fontWeight: isSelected ? FontWeight.w900 : FontWeight.w500,
-                                    color: isSelected ? AppColors.primaryLight : const Color(0xFF64748B),
+                                    color: isSelected ? const Color.fromARGB(255, 253, 0, 0) : const Color(0xFF64748B),
                                     letterSpacing: isSelected ? 0.2 : 0,
                                   ),
                                   child: Text(item.label),

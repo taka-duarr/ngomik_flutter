@@ -17,20 +17,19 @@ class GoogleDotsLoading extends StatefulWidget {
   });
 
   // Preset Google colors matching the screenshot:
-  // #EA4335 (Red), #FBBC05 (Yellow), #34A853 (Green), #4285F4 (Blue)
   static const List<Color> googleColors = [
-    Color(0xFFEA4335), // Red
-    Color(0xFFFBBC05), // Yellow
-    Color(0xFF34A853), // Green
-    Color(0xFF4285F4), // Blue
+    Color(0xFFEA4335), // Google Red
+    Color(0xFFFBBC05), // Google Yellow
+    Color(0xFF34A853), // Google Green
+    Color(0xFF4285F4), // Google Blue
   ];
 
   // Preset Neon colors matching the app theme
   static const List<Color> neonColors = [
-    Color(0xFFFF2E63), // Neon Pink
-    Color(0xFFFFB800), // Neon Yellow/Gold
-    Color(0xFF10B981), // Neon Emerald
-    Color(0xFF00F0FF), // Neon Cyan
+    Color(0xFFFF0055), // Ultra-Vivid Neon Crimson Red
+    Color(0xFFFFB800), // Neon Gold
+    Color(0xFF00E676), // Neon Emerald
+    Color(0xFF00E5FF), // Neon Electric Cyan
   ];
 
   @override
@@ -93,6 +92,8 @@ class _GoogleDotsLoadingState extends State<GoogleDotsLoading>
               scaleY = 1.0 - (squash * 0.15);
             }
 
+            final dotColor = colors[index % colors.length];
+
             return Padding(
               padding: EdgeInsets.symmetric(horizontal: widget.spacing / 2),
               child: Transform.translate(
@@ -104,13 +105,20 @@ class _GoogleDotsLoadingState extends State<GoogleDotsLoading>
                     width: widget.dotSize,
                     height: widget.dotSize,
                     decoration: BoxDecoration(
-                      color: colors[index % colors.length],
+                      color: dotColor,
                       shape: BoxShape.circle,
                       boxShadow: [
+                        // Inner bright glow
                         BoxShadow(
-                          color: colors[index % colors.length].withValues(alpha: 0.4),
-                          blurRadius: 6,
-                          offset: const Offset(0, 2),
+                          color: dotColor.withValues(alpha: 0.85),
+                          blurRadius: 8,
+                          spreadRadius: 1,
+                        ),
+                        // Outer ambient neon aura
+                        BoxShadow(
+                          color: dotColor.withValues(alpha: 0.45),
+                          blurRadius: 14,
+                          spreadRadius: 2,
                         ),
                       ],
                     ),

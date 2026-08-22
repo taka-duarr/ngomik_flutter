@@ -7,6 +7,8 @@ import '../../models/chapter.dart';
 import '../../services/shngm_api_service.dart';
 import '../../providers/history_provider.dart';
 import '../../providers/auth_provider.dart';
+import '../../widgets/google_dots_loading.dart';
+import '../../widgets/comments_section.dart';
 
 class ReaderScreen extends StatefulWidget {
   final String chapterId;
@@ -99,7 +101,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
           GestureDetector(
             onTap: _toggleControls,
             child: _isLoading
-                ? const Center(child: CircularProgressIndicator(color: AppColors.primary))
+                ? const Center(child: GoogleDotsLoading(dotSize: 13, jumpHeight: 18))
                 : (_chapterDetail == null || _chapterDetail!.images.isEmpty)
                     ? Center(
                         child: Column(
@@ -126,11 +128,19 @@ class _ReaderScreenState extends State<ReaderScreen> {
                           top: MediaQuery.of(context).padding.top + 50,
                           bottom: 100,
                         ),
-                        itemCount: _chapterDetail!.images.length + 1,
+                        itemCount: _chapterDetail!.images.length + 2,
                         itemBuilder: (context, index) {
                           // Next Chapter Footer Banner
                           if (index == _chapterDetail!.images.length) {
                             return _buildEndChapterBanner();
+                          }
+
+                          // Embedded Chapter Comments Section
+                          if (index == _chapterDetail!.images.length + 1) {
+                            return CommentsSection(
+                              path: 'chapter/$_currentChapterId',
+                              title: '${widget.manga.title} - Ch. $_currentChapterNumber',
+                            );
                           }
 
                           final imgUrl = _chapterDetail!.images[index];
@@ -246,14 +256,24 @@ class _ReaderScreenState extends State<ReaderScreen> {
                         : AppColors.textDisabled,
                   ),
 
-                  // Chapter Status Text
-                  Text(
-                    'Chapter $_currentChapterNumber',
-                    style: const TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w800,
-                      color: Colors.white,
-                    ),
+                  // Chapter Status Text & Comment Button
+                  Row(
+                    children: [
+                      Text(
+                        'Chapter $_currentChapterNumber',
+                        style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w800,
+                          color: Colors.white,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      IconButton(
+                        tooltip: 'Komentar Chapter',
+                        icon: const Icon(Icons.chat_bubble_outline_rounded, size: 20, color: AppColors.cyan),
+                        onPressed: _scrollToComments,
+                      ),
+                    ],
                   ),
 
                   // Next Chapter
@@ -273,6 +293,16 @@ class _ReaderScreenState extends State<ReaderScreen> {
         ],
       ),
     );
+  }
+
+  void _scrollToComments() {
+    if (_scrollController.hasClients) {
+      _scrollController.animateTo(
+        _scrollController.position.maxScrollExtent,
+        duration: const Duration(milliseconds: 600),
+        curve: Curves.easeInOutCubic,
+      );
+    }
   }
 
   Widget _buildEndChapterBanner() {
@@ -313,12 +343,24 @@ class _ReaderScreenState extends State<ReaderScreen> {
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 ),
               ),
-            )
-          else
-            const Text(
-              '🎉 Ini adalah chapter terbaru yang tersedia saat ini!',
-              style: TextStyle(fontSize: 12, color: AppColors.textMuted),
             ),
+          const SizedBox(height: 10),
+          SizedBox(
+            width: double.infinity,
+            height: 42,
+            child: OutlinedButton.icon(
+              onPressed: _scrollToComments,
+              icon: const Icon(Icons.chat_bubble_outline_rounded, color: AppColors.cyan, size: 18),
+              label: const Text(
+                'Lihat & Tulis Komentar Chapter',
+                style: TextStyle(fontWeight: FontWeight.w700, color: AppColors.cyan),
+              ),
+              style: OutlinedButton.styleFrom(
+                side: const BorderSide(color: AppColors.border),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+            ),
+          ),
         ],
       ),
     );
