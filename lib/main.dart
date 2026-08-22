@@ -20,6 +20,10 @@ void main() async {
     debugPrint('Warning: .env file could not be loaded: $e');
   }
 
+  // Clear in-memory image cache to avoid decoder artifacts
+  PaintingBinding.instance.imageCache.clear();
+  PaintingBinding.instance.imageCache.clearLiveImages();
+
   // Set immersive dark status bar & navigation bar
   SystemChrome.setSystemUIOverlayStyle(
     const SystemUiOverlayStyle(
@@ -38,31 +42,59 @@ void main() async {
   // Initialize storage & providers
   await authProvider.init();
   await bookmarkProvider.init(token: authProvider.token);
-  await historyProvider.init();
+  await historyProvider.init(token: authProvider.token);
 
   runApp(
-    MultiProvider(
-      providers: [
-        ChangeNotifierProvider.value(value: authProvider),
-        ChangeNotifierProvider.value(value: bookmarkProvider),
-        ChangeNotifierProvider.value(value: historyProvider),
-        ChangeNotifierProvider.value(value: mangaProvider),
-      ],
-      child: const NgomikApp(),
+    NgomikApp(
+      authProvider: authProvider,
+      bookmarkProvider: bookmarkProvider,
+      historyProvider: historyProvider,
+      mangaProvider: mangaProvider,
     ),
   );
 }
 
 class NgomikApp extends StatelessWidget {
-  const NgomikApp({super.key});
+  final AuthProvider? authProvider;
+  final BookmarkProvider? bookmarkProvider;
+  final HistoryProvider? historyProvider;
+  final MangaProvider? mangaProvider;
+
+  const NgomikApp({
+    super.key,
+    this.authProvider,
+    this.bookmarkProvider,
+    this.historyProvider,
+    this.mangaProvider,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Ngomik',
-      debugShowCheckedModeBanner: false,
-      theme: AppTheme.darkTheme,
-      home: const MainNavigationShell(),
+    return MultiProvider(
+      providers: [
+        if (authProvider != null)
+          ChangeNotifierProvider.value(value: authProvider!)
+        else
+          ChangeNotifierProvider(create: (_) => AuthProvider()),
+        if (bookmarkProvider != null)
+          ChangeNotifierProvider.value(value: bookmarkProvider!)
+        else
+          ChangeNotifierProvider(create: (_) => BookmarkProvider()),
+        if (historyProvider != null)
+          ChangeNotifierProvider.value(value: historyProvider!)
+        else
+          ChangeNotifierProvider(create: (_) => HistoryProvider()),
+        if (mangaProvider != null)
+          ChangeNotifierProvider.value(value: mangaProvider!)
+        else
+          ChangeNotifierProvider(create: (_) => MangaProvider()),
+      ],
+      child: MaterialApp(
+        title: 'Ngomik',
+        debugShowCheckedModeBanner: false,
+        theme: AppTheme.darkTheme,
+        home: const MainNavigationShell(),
+      ),
     );
   }
 }

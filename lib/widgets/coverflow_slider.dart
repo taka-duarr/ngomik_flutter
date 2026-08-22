@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:carousel_slider/carousel_slider.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 import '../core/constants/app_colors.dart';
 import '../models/manga.dart';
 import '../screens/detail/manga_detail_screen.dart';
 import 'manga_flag.dart';
+import 'app_network_image.dart';
 
 class CoverflowSlider extends StatefulWidget {
   final List<Manga> mangaList;
@@ -80,11 +80,9 @@ class _CoverflowSliderState extends State<CoverflowSlider> {
           fit: StackFit.expand,
           children: [
             // Cover Image
-            CachedNetworkImage(
+            AppNetworkImage(
               imageUrl: manga.coverUrl,
               fit: BoxFit.cover,
-              placeholder: (context, url) => Container(color: AppColors.surface),
-              errorWidget: (context, url, error) => Container(color: AppColors.surface),
             ),
 
             // Gradient Overlay

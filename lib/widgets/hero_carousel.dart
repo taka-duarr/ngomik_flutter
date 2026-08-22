@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:carousel_slider/carousel_slider.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 import '../core/constants/app_colors.dart';
 import '../models/manga.dart';
 import '../screens/detail/manga_detail_screen.dart';
+import 'app_network_image.dart';
 
 class HeroCarousel extends StatefulWidget {
   final List<Manga> mangaList;
@@ -94,11 +94,9 @@ class _HeroCarouselState extends State<HeroCarousel> {
           fit: StackFit.expand,
           children: [
             // Background Image
-            CachedNetworkImage(
+            AppNetworkImage(
               imageUrl: image,
               fit: BoxFit.cover,
-              placeholder: (context, url) => Container(color: AppColors.surface),
-              errorWidget: (context, url, error) => Container(color: AppColors.surface),
             ),
 
             // Gradient Overlay
@@ -132,17 +130,31 @@ class _HeroCarouselState extends State<HeroCarousel> {
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                         decoration: BoxDecoration(
-                          color: const Color(0xFFF43F5E),
+                          gradient: AppColors.neonPinkGradient,
                           borderRadius: BorderRadius.circular(20),
+                          boxShadow: [
+                            BoxShadow(
+                              color: const Color(0xFFFF2E63).withValues(alpha: 0.4),
+                              blurRadius: 8,
+                              offset: const Offset(0, 2),
+                            ),
+                          ],
                         ),
-                        child: Text(
-                          '?? #${index + 1} TRENDING',
-                          style: const TextStyle(
-                            fontSize: 9.5,
-                            fontWeight: FontWeight.w900,
-                            color: Colors.white,
-                            letterSpacing: 0.3,
-                          ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.local_fire_department_rounded, size: 12, color: Colors.white),
+                            const SizedBox(width: 3),
+                            Text(
+                              '#${index + 1} TRENDING',
+                              style: const TextStyle(
+                                fontSize: 9.5,
+                                fontWeight: FontWeight.w900,
+                                color: Colors.white,
+                                letterSpacing: 0.3,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                       if (manga.rating > 0) ...[

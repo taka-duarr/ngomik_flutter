@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/utils/date_formatter.dart';
 import '../../providers/history_provider.dart';
 import '../../models/manga.dart';
+import '../../widgets/app_network_image.dart';
 import '../reader/reader_screen.dart';
 
 class HistoryScreen extends StatelessWidget {
@@ -38,7 +38,7 @@ class HistoryScreen extends StatelessWidget {
                     backgroundColor: AppColors.surface,
                     title: const Text('Hapus Riwayat?'),
                     content: const Text(
-                      'Semua riwayat komik yang telah kamu baca akan dibersihkan dari penyimpanan.',
+                      'Semua riwayat bacaan kamu akan dibersihkan.',
                       style: TextStyle(color: AppColors.textSecondary),
                     ),
                     actions: [
@@ -93,7 +93,7 @@ class HistoryScreen extends StatelessWidget {
               ),
             )
           : ListView.builder(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 96),
               itemCount: historyProvider.history.length,
               itemBuilder: (context, index) {
                 final item = historyProvider.history[index];
@@ -131,10 +131,9 @@ class HistoryScreen extends StatelessWidget {
                             color: AppColors.surface,
                           ),
                           clipBehavior: Clip.antiAlias,
-                          child: CachedNetworkImage(
+                          child: AppNetworkImage(
                             imageUrl: item.coverUrl,
                             fit: BoxFit.cover,
-                            errorWidget: (context, url, error) => const Icon(Icons.broken_image, size: 20),
                           ),
                         ),
                         const SizedBox(width: 12),
@@ -162,7 +161,9 @@ class HistoryScreen extends StatelessWidget {
                                   borderRadius: BorderRadius.circular(4),
                                 ),
                                 child: Text(
-                                  'Terakhir: Chapter ${item.chapterNumber}',
+                                  item.chapterNumber.isNotEmpty && item.chapterNumber != '0'
+                                      ? 'Terakhir: Chapter ${item.chapterNumber}'
+                                      : 'Terakhir Dibaca',
                                   style: const TextStyle(
                                     fontSize: 11,
                                     fontWeight: FontWeight.w700,

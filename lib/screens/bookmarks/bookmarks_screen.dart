@@ -4,6 +4,7 @@ import '../../core/constants/app_colors.dart';
 import '../../providers/bookmark_provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../widgets/manga_card.dart';
+import '../auth/login_screen.dart';
 
 class BookmarksScreen extends StatefulWidget {
   const BookmarksScreen({super.key});
@@ -20,6 +21,76 @@ class _BookmarksScreenState extends State<BookmarksScreen> {
     final bookmarkProvider = context.watch<BookmarkProvider>();
     final authProvider = context.watch<AuthProvider>();
 
+    if (authProvider.token == null) {
+      return Scaffold(
+        appBar: AppBar(
+          title: const Row(
+            children: [
+              Icon(Icons.bookmark_rounded, color: AppColors.primary, size: 22),
+              SizedBox(width: 8),
+              Text(
+                'Bookmark Saya',
+                style: TextStyle(fontWeight: FontWeight.w800, fontSize: 17),
+              ),
+            ],
+          ),
+        ),
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24.0),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 76,
+                  height: 76,
+                  decoration: BoxDecoration(
+                    color: AppColors.primary.withValues(alpha: 0.12),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.account_circle_outlined, size: 42, color: AppColors.primary),
+                ),
+                const SizedBox(height: 16),
+                const Text(
+                  'Masuk untuk Melihat Bookmark',
+                  style: TextStyle(
+                    fontSize: 17,
+                    fontWeight: FontWeight.w900,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'Komik favorit kamu tersimpan langsung di database akun Shinigami agar tidak membebani memori HP.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 12.5, color: AppColors.textMuted, height: 1.4),
+                ),
+                const SizedBox(height: 20),
+                ElevatedButton.icon(
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const LoginScreen()),
+                    );
+                  },
+                  icon: const Icon(Icons.login_rounded, size: 18, color: Colors.white),
+                  label: const Text(
+                    'Hubungkan / Masuk Akun',
+                    style: TextStyle(fontWeight: FontWeight.w800, color: Colors.white),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
     final filteredList = bookmarkProvider.bookmarks.where((m) {
       if (_filterQuery.isEmpty) return true;
       return m.title.toLowerCase().contains(_filterQuery.toLowerCase());
@@ -32,67 +103,66 @@ class _BookmarksScreenState extends State<BookmarksScreen> {
             const Icon(Icons.bookmark_rounded, color: AppColors.primary, size: 22),
             const SizedBox(width: 8),
             Text(
-              'Bookmark Saya ()',
+              'Bookmark Saya (${bookmarkProvider.count})',
               style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 17),
             ),
           ],
         ),
         actions: [
-          if (authProvider.token != null)
-            IconButton(
-              icon: const Icon(Icons.sync_rounded, size: 20),
-              tooltip: 'Sinkronkan dengan Shinigami Web',
-              onPressed: () {
-                bookmarkProvider.syncRemoteBookmarks(authProvider.token!);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Menyinkronkan bookmark dengan Shinigami...'),
-                    duration: Duration(seconds: 1),
-                  ),
-                );
-              },
-            ),
+          IconButton(
+            icon: const Icon(Icons.sync_rounded, size: 20),
+            tooltip: 'Sinkronkan dengan Database Shinigami',
+            onPressed: () {
+              bookmarkProvider.syncRemoteBookmarks(authProvider.token!);
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Menyinkronkan bookmark dengan server Shinigami...'),
+                  duration: Duration(seconds: 1),
+                ),
+              );
+            },
+          ),
         ],
       ),
-      body: bookmarkProvider.bookmarks.isEmpty
-          ? Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    width: 70,
-                    height: 70,
-                    decoration: BoxDecoration(
-                      color: AppColors.primary.withValues(alpha: 0.12),
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(Icons.bookmark_border_rounded, size: 36, color: AppColors.primary),
+      body: bookmarkProvider.isLoading
+          ? const Center(child: CircularProgressIndicator(color: AppColors.primary))
+          : bookmarkProvider.bookmarks.isEmpty
+              ? Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        width: 70,
+                        height: 70,
+                        decoration: BoxDecoration(
+                          color: AppColors.primary.withValues(alpha: 0.12),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(Icons.bookmark_border_rounded, size: 36, color: AppColors.primary),
+                      ),
+                      const SizedBox(height: 16),
+                      const Text(
+                        'Belum Ada Komik Tersimpan',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w800,
+                          color: AppColors.textPrimary,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      const Text(
+                        'Simpan komik favoritmu untuk membaca lebih mudah.',
+                        style: TextStyle(fontSize: 12, color: AppColors.textMuted),
+                      ),
+                    ],
                   ),
-                  const SizedBox(height: 16),
-                  const Text(
-                    'Belum Ada Komik Tersimpan',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w800,
-                      color: AppColors.textPrimary,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  const Text(
-                    'Simpan komik favoritmu untuk membaca lebih mudah.',
-                    style: TextStyle(fontSize: 12, color: AppColors.textMuted),
-                  ),
-                ],
-              ),
-            )
-          : RefreshIndicator(
-              color: AppColors.primary,
-              backgroundColor: AppColors.card,
-              onRefresh: () async {
-                if (authProvider.token != null) {
-                  await bookmarkProvider.syncRemoteBookmarks(authProvider.token!);
-                }
-              },
+                )
+              : RefreshIndicator(
+                  color: AppColors.primary,
+                  backgroundColor: AppColors.card,
+                  onRefresh: () async {
+                    await bookmarkProvider.syncRemoteBookmarks(authProvider.token!);
+                  },
               child: CustomScrollView(
                 slivers: [
                   // Search within bookmarks
@@ -141,7 +211,7 @@ class _BookmarksScreenState extends State<BookmarksScreen> {
                     ),
                   ),
 
-                  const SliverToBoxAdapter(child: SizedBox(height: 24)),
+                  const SliverToBoxAdapter(child: SizedBox(height: 96)),
                 ],
               ),
             ),

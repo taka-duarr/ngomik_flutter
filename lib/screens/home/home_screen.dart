@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:ngomik_flutter/core/constants/app_colors.dart';
 import 'package:ngomik_flutter/providers/manga_provider.dart';
 import 'package:ngomik_flutter/providers/auth_provider.dart';
 import 'package:ngomik_flutter/widgets/hero_carousel.dart';
 import 'package:ngomik_flutter/widgets/coverflow_slider.dart';
 import 'package:ngomik_flutter/widgets/manga_card.dart';
+import 'package:ngomik_flutter/widgets/app_network_image.dart';
 import 'package:ngomik_flutter/screens/auth/login_screen.dart';
 import 'package:ngomik_flutter/screens/settings/settings_screen.dart';
 
@@ -18,12 +18,37 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
+  final ScrollController _scrollController = ScrollController();
+
   @override
   void initState() {
     super.initState();
+    _scrollController.addListener(_onScroll);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<MangaProvider>().loadHomeFeed();
     });
+  }
+
+  @override
+  void dispose() {
+    _scrollController.removeListener(_onScroll);
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _onScroll() {
+    if (_scrollController.hasClients) {
+      final maxScroll = _scrollController.position.maxScrollExtent;
+      final currentScroll = _scrollController.position.pixels;
+      if (maxScroll - currentScroll <= 600) {
+        final provider = context.read<MangaProvider>();
+        if (provider.isFiltered) {
+          provider.loadMoreFiltered();
+        } else {
+          provider.loadMorePopular();
+        }
+      }
+    }
   }
 
   @override
@@ -52,6 +77,7 @@ class _HomeScreenState extends State<HomeScreen> {
               backgroundColor: AppColors.card,
               onRefresh: () => provider.loadHomeFeed(refresh: true),
               child: CustomScrollView(
+                controller: _scrollController,
                 slivers: [
                   // 1. Topbar (Greeting Layout from screenshot)
                   SliverToBoxAdapter(
@@ -92,10 +118,10 @@ class _HomeScreenState extends State<HomeScreen> {
                                   ),
                                   clipBehavior: Clip.antiAlias,
                                   child: user?.avatarImageUrl != null && user!.avatarImageUrl!.isNotEmpty
-                                      ? CachedNetworkImage(
+                                      ? AppNetworkImage(
                                           imageUrl: user.avatarImageUrl!,
                                           fit: BoxFit.cover,
-                                          errorWidget: (context, url, error) => Center(
+                                          errorWidget: Center(
                                             child: Text(
                                               userInitials,
                                               style: const TextStyle(
@@ -220,7 +246,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             GestureDetector(
                               onTap: () => provider.setFilter('all'),
                               child: const Text(
-                                '? Beranda',
+                                '🏠 Beranda',
                                 style: TextStyle(
                                   fontSize: 12.5,
                                   fontWeight: FontWeight.w700,
@@ -239,15 +265,15 @@ class _HomeScreenState extends State<HomeScreen> {
                           child: Center(child: CircularProgressIndicator(color: AppColors.primary)),
                         ),
                       )
-                    else
+                    else ...[
                       SliverPadding(
                         padding: const EdgeInsets.symmetric(horizontal: 16),
                         sliver: SliverGrid(
                           gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                             crossAxisCount: 2,
-                            childAspectRatio: 0.64,
-                            crossAxisSpacing: 12,
-                            mainAxisSpacing: 14,
+                            childAspectRatio: 0.58,
+                            crossAxisSpacing: 14,
+                            mainAxisSpacing: 18,
                           ),
                           delegate: SliverChildBuilderDelegate(
                             (context, index) {
@@ -258,6 +284,20 @@ class _HomeScreenState extends State<HomeScreen> {
                           ),
                         ),
                       ),
+                      if (provider.isLoadingMoreFiltered)
+                        const SliverToBoxAdapter(
+                          child: Padding(
+                            padding: EdgeInsets.symmetric(vertical: 24),
+                            child: Center(
+                              child: SizedBox(
+                                width: 26,
+                                height: 26,
+                                child: CircularProgressIndicator(strokeWidth: 2.5, color: AppColors.primary),
+                              ),
+                            ),
+                          ),
+                        ),
+                    ],
                   ] else ...[
                     // DEFAULT HOME VIEW (Matching Screenshot)
 
@@ -296,7 +336,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                     border: Border.all(color: AppColors.border),
                                   ),
                                   child: const Text(
-                                    'See all ?',
+                                    'See all ➔',
                                     style: TextStyle(
                                       fontSize: 11,
                                       fontWeight: FontWeight.w700,
@@ -344,7 +384,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                     border: Border.all(color: AppColors.border),
                                   ),
                                   child: const Text(
-                                    'See all ?',
+                                    'See all ➔',
                                     style: TextStyle(
                                       fontSize: 11,
                                       fontWeight: FontWeight.w700,
@@ -364,9 +404,9 @@ class _HomeScreenState extends State<HomeScreen> {
                         sliver: SliverGrid(
                           gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                             crossAxisCount: 2,
-                            childAspectRatio: 0.64,
-                            crossAxisSpacing: 12,
-                            mainAxisSpacing: 14,
+                            childAspectRatio: 0.58,
+                            crossAxisSpacing: 14,
+                            mainAxisSpacing: 18,
                           ),
                           delegate: SliverChildBuilderDelegate(
                             (context, index) {
@@ -377,10 +417,24 @@ class _HomeScreenState extends State<HomeScreen> {
                           ),
                         ),
                       ),
+
+                      if (provider.isLoadingMorePopular)
+                        const SliverToBoxAdapter(
+                          child: Padding(
+                            padding: EdgeInsets.symmetric(vertical: 24),
+                            child: Center(
+                              child: SizedBox(
+                                width: 26,
+                                height: 26,
+                                child: CircularProgressIndicator(strokeWidth: 2.5, color: AppColors.primary),
+                              ),
+                            ),
+                          ),
+                        ),
                     ],
                   ],
 
-                  const SliverToBoxAdapter(child: SizedBox(height: 24)),
+                  const SliverToBoxAdapter(child: SizedBox(height: 96)),
                 ],
               ),
             );
@@ -399,17 +453,18 @@ class _HomeScreenState extends State<HomeScreen> {
         duration: const Duration(milliseconds: 200),
         padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
         decoration: BoxDecoration(
-          color: isSelected ? const Color(0xFFF43F5E) : const Color(0xFF1E293B),
+          gradient: isSelected ? AppColors.neonPinkGradient : null,
+          color: isSelected ? null : const Color(0xFF131826),
           borderRadius: BorderRadius.circular(22),
           border: Border.all(
-            color: isSelected ? const Color(0xFFF43F5E) : AppColors.border,
+            color: isSelected ? const Color(0xFFFF3366) : AppColors.border,
             width: isSelected ? 1.5 : 1,
           ),
           boxShadow: isSelected
               ? [
                   BoxShadow(
-                    color: AppColors.primary.withValues(alpha: 0.4),
-                    blurRadius: 10,
+                    color: const Color(0xFFFF2E63).withValues(alpha: 0.45),
+                    blurRadius: 12,
                     offset: const Offset(0, 3),
                   ),
                 ]

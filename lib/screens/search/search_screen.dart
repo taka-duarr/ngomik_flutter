@@ -13,6 +13,7 @@ class SearchScreen extends StatefulWidget {
 
 class _SearchScreenState extends State<SearchScreen> {
   final TextEditingController _searchCtrl = TextEditingController();
+  final ScrollController _scrollController = ScrollController();
   String? _selectedGenre;
   String? _selectedStatus;
   String? _selectedType;
@@ -25,9 +26,23 @@ class _SearchScreenState extends State<SearchScreen> {
   ];
 
   @override
+  void initState() {
+    super.initState();
+    _scrollController.addListener(_onScroll);
+  }
+
+  @override
   void dispose() {
+    _scrollController.removeListener(_onScroll);
+    _scrollController.dispose();
     _searchCtrl.dispose();
     super.dispose();
+  }
+
+  void _onScroll() {
+    if (_scrollController.position.pixels >= _scrollController.position.maxScrollExtent - 400) {
+      context.read<MangaProvider>().loadMoreSearch();
+    }
   }
 
   void _executeSearch() {
@@ -191,19 +206,42 @@ class _SearchScreenState extends State<SearchScreen> {
                   );
                 }
 
-                return GridView.builder(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 2,
-                    childAspectRatio: 0.64,
-                    crossAxisSpacing: 12,
-                    mainAxisSpacing: 14,
-                  ),
-                  itemCount: provider.searchResults.length,
-                  itemBuilder: (context, index) {
-                    final manga = provider.searchResults[index];
-                    return MangaCard(manga: manga);
-                  },
+                return CustomScrollView(
+                  controller: _scrollController,
+                  slivers: [
+                    SliverPadding(
+                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                      sliver: SliverGrid(
+                        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: 2,
+                          childAspectRatio: 0.58,
+                          crossAxisSpacing: 14,
+                          mainAxisSpacing: 18,
+                        ),
+                        delegate: SliverChildBuilderDelegate(
+                          (context, index) {
+                            final manga = provider.searchResults[index];
+                            return MangaCard(manga: manga);
+                          },
+                          childCount: provider.searchResults.length,
+                        ),
+                      ),
+                    ),
+                    if (provider.isLoadingMoreSearch)
+                      const SliverToBoxAdapter(
+                        child: Padding(
+                          padding: EdgeInsets.symmetric(vertical: 20),
+                          child: Center(
+                            child: SizedBox(
+                              width: 26,
+                              height: 26,
+                              child: CircularProgressIndicator(strokeWidth: 2.5, color: AppColors.primary),
+                            ),
+                          ),
+                        ),
+                      ),
+                    const SliverToBoxAdapter(child: SizedBox(height: 96)),
+                  ],
                 );
               },
             ),
@@ -274,15 +312,15 @@ class _SearchScreenState extends State<SearchScreen> {
                         setModalState(() => _selectedType = val);
                       }),
                       const SizedBox(width: 8),
-                      _buildModalChip('???? Manhwa', 'manhwa', _selectedType, (val) {
+                      _buildModalChip('🇰🇷 Manhwa', 'manhwa', _selectedType, (val) {
                         setModalState(() => _selectedType = val);
                       }),
                       const SizedBox(width: 8),
-                      _buildModalChip('???? Manga', 'manga', _selectedType, (val) {
+                      _buildModalChip('🇯🇵 Manga', 'manga', _selectedType, (val) {
                         setModalState(() => _selectedType = val);
                       }),
                       const SizedBox(width: 8),
-                      _buildModalChip('???? Manhua', 'manhua', _selectedType, (val) {
+                      _buildModalChip('🇨🇳 Manhua', 'manhua', _selectedType, (val) {
                         setModalState(() => _selectedType = val);
                       }),
                     ],

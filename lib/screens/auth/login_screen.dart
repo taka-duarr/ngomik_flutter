@@ -4,6 +4,7 @@ import '../../core/constants/app_colors.dart';
 import '../../core/utils/clipboard_helper.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/bookmark_provider.dart';
+import '../../providers/history_provider.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -61,9 +62,10 @@ class _LoginScreenState extends State<LoginScreen> {
     final success = await authProvider.loginWithToken(_tokenCtrl.text);
 
     if (success && mounted) {
-      // Sync bookmarks immediately
+      // Sync bookmarks and history immediately
       if (authProvider.token != null) {
         context.read<BookmarkProvider>().syncRemoteBookmarks(authProvider.token!);
+        context.read<HistoryProvider>().syncRemoteHistory(authProvider.token!);
       }
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -226,7 +228,7 @@ class _LoginScreenState extends State<LoginScreen> {
                             child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                           )
                         : Text(
-                            _autoDetected ? '? Token Siap! Hubungkan Sekarang' : 'Hubungkan & Sinkronkan Akun',
+                            _autoDetected ? '✨ Token Terdeteksi! Hubungkan Sekarang' : 'Hubungkan & Sinkronkan Akun',
                             style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w800, color: Colors.white),
                           ),
                   ),
@@ -278,13 +280,20 @@ class _LoginScreenState extends State<LoginScreen> {
                               borderRadius: BorderRadius.circular(6),
                             ),
                             alignment: Alignment.center,
-                            child: Text(
-                              '?? Laptop / PC',
-                              style: TextStyle(
-                                fontSize: 11.5,
-                                fontWeight: FontWeight.w700,
-                                color: _guideTab == 'pc' ? AppColors.cyan : AppColors.textMuted,
-                              ),
+                            child: const Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(Icons.laptop_chromebook_rounded, size: 14, color: AppColors.cyan),
+                                SizedBox(width: 5),
+                                Text(
+                                  'Laptop / PC',
+                                  style: TextStyle(
+                                    fontSize: 11.5,
+                                    fontWeight: FontWeight.w700,
+                                    color: AppColors.cyan,
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                         ),
@@ -301,13 +310,20 @@ class _LoginScreenState extends State<LoginScreen> {
                               borderRadius: BorderRadius.circular(6),
                             ),
                             alignment: Alignment.center,
-                            child: Text(
-                              '?? HP Android',
-                              style: TextStyle(
-                                fontSize: 11.5,
-                                fontWeight: FontWeight.w700,
-                                color: _guideTab == 'hp' ? AppColors.primaryLight : AppColors.textMuted,
-                              ),
+                            child: const Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(Icons.smartphone_rounded, size: 14, color: AppColors.primaryLight),
+                                SizedBox(width: 5),
+                                Text(
+                                  'HP Android',
+                                  style: TextStyle(
+                                    fontSize: 11.5,
+                                    fontWeight: FontWeight.w700,
+                                    color: AppColors.primaryLight,
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                         ),
@@ -319,9 +335,9 @@ class _LoginScreenState extends State<LoginScreen> {
                 if (_guideTab == 'pc') ...[
                   const Text(
                     '1. Buka 11.shinigami.asia & pastikan sudah login.\n'
-                    '2. Tekan F12 (Inspect Element) ? Tab Network.\n'
+                    '2. Tekan F12 (Inspect Element) ➜ Tab Network.\n'
                     '3. Buka halaman Bookmark di web.\n'
-                    '4. Klik list?page=1... ? Tab Headers.\n'
+                    '4. Klik list?page=1... ➜ Tab Headers.\n'
                     '5. Salin teks authorization: Bearer v4.public...',
                     style: TextStyle(fontSize: 12, color: AppColors.textSecondary, height: 1.5),
                   ),

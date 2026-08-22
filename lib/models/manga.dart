@@ -40,15 +40,34 @@ class Manga {
   });
 
   factory Manga.fromJson(Map<String, dynamic> json) {
-    final id = (json['manga_id'] ?? json['id'] ?? json['uuid'] ?? '').toString();
-    final title = (json['title'] ?? json['name'] ?? 'Judul Komik').toString();
+    final mangaObj = json['manga'] is Map<String, dynamic> ? json['manga'] as Map<String, dynamic> : null;
+    final id = (json['manga_id'] ?? mangaObj?['id'] ?? json['id'] ?? json['uuid'] ?? '').toString();
+    final title = (mangaObj?['title'] ?? json['title'] ?? mangaObj?['name'] ?? json['name'] ?? 'Judul Komik').toString();
+
+    // Normalizer for image URLs
+    String normalizeUrl(String? raw) {
+      if (raw == null) return '';
+      var url = raw.trim();
+      if (url.isEmpty || url == 'null' || url == 'undefined') return '';
+      if (url.startsWith('//')) {
+        return 'https:$url';
+      }
+      if (url.startsWith('/')) {
+        return 'https://assets.shngm.id$url';
+      }
+      if (!url.startsWith('http://') && !url.startsWith('https://')) {
+        return 'https://assets.shngm.id/$url';
+      }
+      return url;
+    }
 
     // Helper to find the first non-empty image URL
     String getFirstNonEmpty(List<String> keys) {
       for (final k in keys) {
-        final val = json[k]?.toString().trim();
-        if (val != null && val.isNotEmpty && val != 'null') {
-          return val;
+        final val = json[k]?.toString() ?? mangaObj?[k]?.toString();
+        final normalized = normalizeUrl(val);
+        if (normalized.isNotEmpty) {
+          return normalized;
         }
       }
       return '';
@@ -57,11 +76,14 @@ class Manga {
     String cover = getFirstNonEmpty([
       'cover_portrait_url',
       'cover_image_url',
+      'cover_landscape_url',
+      'thumbnail_image_url',
       'cover_url',
       'cover',
-      'cover_landscape_url',
       'banner_image_url',
       'banner_url',
+      'thumbnail',
+      'image',
     ]);
 
     String banner = getFirstNonEmpty([
@@ -71,7 +93,11 @@ class Manga {
       'banner',
       'cover_portrait_url',
       'cover_image_url',
+      'thumbnail_image_url',
       'cover_url',
+      'cover',
+      'thumbnail',
+      'image',
     ]);
 
     if (banner.isEmpty) banner = cover;

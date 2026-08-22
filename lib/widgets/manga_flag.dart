@@ -8,48 +8,24 @@ class MangaFlag extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final lower = type.toLowerCase();
-    String code = 'KR';
-    String emoji = '????';
-    Color bg = const Color(0xFF1E3A8A); // Deep Blue
-    Color textCol = const Color(0xFF93C5FD);
+    String emoji = '🇰🇷';
 
-    if (lower.contains('manga') || lower.contains('jp')) {
-      code = 'JP';
-      emoji = '????';
-      bg = const Color(0xFF831843); // Deep Pink/Red
-      textCol = const Color(0xFFF9A8D4);
-    } else if (lower.contains('manhua') || lower.contains('cn')) {
-      code = 'CN';
-      emoji = '????';
-      bg = const Color(0xFF7C2D12); // Deep Amber/Red
-      textCol = const Color(0xFFFDBA74);
+    if (lower.contains('manga') || lower.contains('jp') || lower.contains('japan')) {
+      emoji = '🇯🇵';
+    } else if (lower.contains('manhua') || lower.contains('cn') || lower.contains('china')) {
+      emoji = '🇨🇳';
     }
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      padding: const EdgeInsets.all(4.5),
       decoration: BoxDecoration(
-        color: bg.withValues(alpha: 0.85),
-        borderRadius: BorderRadius.circular(4),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.2), width: 0.5),
+        color: Colors.black.withValues(alpha: 0.65),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.15), width: 0.6),
       ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            emoji,
-            style: const TextStyle(fontSize: 10),
-          ),
-          const SizedBox(width: 3),
-          Text(
-            code,
-            style: TextStyle(
-              fontSize: 9,
-              fontWeight: FontWeight.w900,
-              color: textCol,
-              letterSpacing: 0.5,
-            ),
-          ),
-        ],
+      child: Text(
+        emoji,
+        style: const TextStyle(fontSize: 12, height: 1),
       ),
     );
   }

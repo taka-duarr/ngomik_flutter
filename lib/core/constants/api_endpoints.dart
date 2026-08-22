@@ -3,7 +3,15 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 class ApiEndpoints {
   ApiEndpoints._();
 
-  static String get baseUrl => dotenv.env['API_BASE_URL'] ?? 'https://api.shngm.io';
+  // Base URLs directly from .env
+  static String get baseUrl => dotenv.env['API_BASE_URL'] ?? '';
+  static String get walineComments => dotenv.env['WALINE_API_URL'] ?? '';
+  static String get origin => dotenv.env['DEFAULT_ORIGIN'] ?? '';
+  static String get referer => dotenv.env['DEFAULT_REFERER'] ?? '';
+  static String get assetsBaseUrl => dotenv.env['ASSETS_BASE_URL'] ?? 'https://assets.shngm.id';
+  static String get userAgent =>
+      dotenv.env['USER_AGENT'] ??
+      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
 
   // Manga Lists
   static String get latestManga => '$baseUrl/v1/manga/list';
@@ -24,25 +32,18 @@ class ApiEndpoints {
   static String get bookmarkRemove => '$baseUrl/v1/bookmark/remove';
 
   // Reading History
+  static String get historyList => '$baseUrl/v1/history/list/manga';
   static String get historyAdd => '$baseUrl/v1/history/add';
   static String get historyRemove => '$baseUrl/v1/history/remove';
 
-  // Comments (Waline API)
-  static String get walineComments =>
-      dotenv.env['WALINE_API_URL'] ?? 'https://commento.shngm.io/api/comment';
-
   // Default Headers
   static Map<String, String> defaultHeaders({String? token}) {
-    final origin = dotenv.env['DEFAULT_ORIGIN'] ?? 'https://11.shinigami.asia';
-    final referer = dotenv.env['DEFAULT_REFERER'] ?? 'https://11.shinigami.asia/';
-
     final headers = {
       'Accept': 'application/json',
       'Content-Type': 'application/json',
-      'Origin': origin,
-      'Referer': referer,
-      'User-Agent':
-          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      if (origin.isNotEmpty) 'Origin': origin,
+      if (referer.isNotEmpty) 'Referer': referer,
+      'User-Agent': userAgent,
     };
 
     if (token != null && token.isNotEmpty) {
@@ -51,5 +52,14 @@ class ApiEndpoints {
     }
 
     return headers;
+  }
+
+  // Dedicated headers for images
+  static Map<String, String> get imageHeaders {
+    return {
+      if (origin.isNotEmpty) 'Origin': origin,
+      if (referer.isNotEmpty) 'Referer': referer,
+      'User-Agent': userAgent,
+    };
   }
 }

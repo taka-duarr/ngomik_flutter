@@ -316,7 +316,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
             )
           else
             const Text(
-              '?? Ini adalah chapter terbaru yang tersedia saat ini!',
+              '🎉 Ini adalah chapter terbaru yang tersedia saat ini!',
               style: TextStyle(fontSize: 12, color: AppColors.textMuted),
             ),
         ],
