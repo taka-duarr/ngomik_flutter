@@ -28,7 +28,8 @@ class _CustomBottomNavState extends State<CustomBottomNav> {
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final totalWidth = constraints.maxWidth - 32; // 16 margin on left & right
+        final totalWidth =
+            constraints.maxWidth - 32; // 16 margin on left & right
         final itemWidth = totalWidth / _items.length;
         final targetX = (widget.currentIndex + 0.5) * itemWidth;
 
@@ -52,7 +53,9 @@ class _CustomBottomNavState extends State<CustomBottomNav> {
                       size: Size(totalWidth, 64),
                       painter: _LiquidNavPainter(
                         activeX: currentX,
-                        backgroundColor: const Color(0xF20D121F), // Dark sleek void
+                        backgroundColor: const Color(
+                          0xF20D121F,
+                        ), // Dark sleek void
                         borderColor: Colors.white.withValues(alpha: 0.14),
                         shadowColor: Colors.black.withValues(alpha: 0.55),
                       ),
@@ -71,7 +74,12 @@ class _CustomBottomNavState extends State<CustomBottomNav> {
                         gradient: AppColors.primaryGradient,
                         boxShadow: [
                           BoxShadow(
-                            color: const Color.fromARGB(255, 255, 0, 0).withValues(alpha: 0.7),
+                            color: const Color.fromARGB(
+                              255,
+                              255,
+                              0,
+                              0,
+                            ).withValues(alpha: 0.7),
                             blurRadius: 20,
                             spreadRadius: 3,
                             offset: const Offset(0, 5),
@@ -134,8 +142,12 @@ class _CustomBottomNavState extends State<CustomBottomNav> {
                                   duration: const Duration(milliseconds: 200),
                                   style: TextStyle(
                                     fontSize: isSelected ? 10.5 : 10,
-                                    fontWeight: isSelected ? FontWeight.w900 : FontWeight.w500,
-                                    color: isSelected ? const Color.fromARGB(255, 253, 0, 0) : const Color(0xFF64748B),
+                                    fontWeight: isSelected
+                                        ? FontWeight.w900
+                                        : FontWeight.w500,
+                                    color: isSelected
+                                        ? const Color.fromARGB(255, 253, 0, 0)
+                                        : const Color(0xFF64748B),
                                     letterSpacing: isSelected ? 0.2 : 0,
                                   ),
                                   child: Text(item.label),

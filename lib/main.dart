@@ -23,6 +23,9 @@ void main() async {
   // Clear in-memory image cache to avoid decoder artifacts
   PaintingBinding.instance.imageCache.clear();
   PaintingBinding.instance.imageCache.clearLiveImages();
+  // Limit cache: 100 images max, 100 MB max — prevent OOM on mid-range devices
+  PaintingBinding.instance.imageCache.maximumSize = 100;
+  PaintingBinding.instance.imageCache.maximumSizeBytes = 100 * 1024 * 1024;
 
   // Set immersive dark status bar & navigation bar
   SystemChrome.setSystemUIOverlayStyle(

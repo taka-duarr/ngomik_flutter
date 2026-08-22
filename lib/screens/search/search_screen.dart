@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../core/constants/app_colors.dart';
@@ -15,6 +16,7 @@ class SearchScreen extends StatefulWidget {
 class _SearchScreenState extends State<SearchScreen> {
   final TextEditingController _searchCtrl = TextEditingController();
   final ScrollController _scrollController = ScrollController();
+  Timer? _debounce;
   String? _selectedGenre;
   String? _selectedStatus;
   String? _selectedType;
@@ -34,6 +36,7 @@ class _SearchScreenState extends State<SearchScreen> {
 
   @override
   void dispose() {
+    _debounce?.cancel();
     _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
     _searchCtrl.dispose();
@@ -92,7 +95,13 @@ class _SearchScreenState extends State<SearchScreen> {
               border: InputBorder.none,
               contentPadding: const EdgeInsets.symmetric(vertical: 10),
             ),
-            onChanged: (val) => setState(() {}),
+            onChanged: (val) {
+              setState(() {});
+              _debounce?.cancel();
+              _debounce = Timer(const Duration(milliseconds: 600), () {
+                _executeSearch();
+              });
+            },
           ),
         ),
       ),

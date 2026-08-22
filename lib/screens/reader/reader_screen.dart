@@ -128,6 +128,10 @@ class _ReaderScreenState extends State<ReaderScreen> {
                           top: MediaQuery.of(context).padding.top + 50,
                           bottom: 100,
                         ),
+                        // Only keep ~3 screen heights of content in memory
+                        cacheExtent: MediaQuery.of(context).size.height * 2.5,
+                        addRepaintBoundaries: true,
+                        addAutomaticKeepAlives: false,
                         itemCount: _chapterDetail!.images.length + 2,
                         itemBuilder: (context, index) {
                           // Next Chapter Footer Banner
@@ -144,25 +148,41 @@ class _ReaderScreenState extends State<ReaderScreen> {
                           }
 
                           final imgUrl = _chapterDetail!.images[index];
-                          return CachedNetworkImage(
-                            imageUrl: imgUrl,
-                            fit: BoxFit.fitWidth,
-                            memCacheWidth: 1080,
-                            placeholder: (context, url) => Container(
-                              height: 300,
-                              color: const Color(0xFF0F172A),
-                              child: const Center(
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: AppColors.primary,
+                          return RepaintBoundary(
+                            child: CachedNetworkImage(
+                              imageUrl: imgUrl,
+                              fit: BoxFit.fitWidth,
+                              // Limit decode size to screen width — save GPU + RAM
+                              memCacheWidth: MediaQuery.of(context).size.width.toInt(),
+                              filterQuality: FilterQuality.medium,
+                              fadeInDuration: const Duration(milliseconds: 150),
+                              placeholder: (context, url) => Container(
+                                height: 300,
+                                color: const Color(0xFF0F172A),
+                                child: const Center(
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: AppColors.primary,
+                                  ),
                                 ),
                               ),
-                            ),
-                            errorWidget: (context, url, error) => Container(
-                              height: 200,
-                              color: const Color(0xFF1E293B),
-                              child: const Center(
-                                child: Icon(Icons.error_outline, color: AppColors.primary),
+                              errorWidget: (context, url, error) => GestureDetector(
+                                onTap: () => setState(() {}), // retry on tap
+                                child: Container(
+                                  height: 200,
+                                  color: const Color(0xFF1E293B),
+                                  child: const Center(
+                                    child: Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(Icons.broken_image_rounded, color: AppColors.primary, size: 32),
+                                        SizedBox(height: 6),
+                                        Text('Tap untuk coba lagi',
+                                            style: TextStyle(color: AppColors.textMuted, fontSize: 11)),
+                                      ],
+                                    ),
+                                  ),
+                                ),
                               ),
                             ),
                           );

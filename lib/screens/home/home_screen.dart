@@ -59,7 +59,12 @@ class _HomeScreenState extends State<HomeScreen> {
 
     final userName = user?.username ?? 'Comic Enjoyer';
     final userInitials = userName.isNotEmpty
-        ? userName.split(' ').map((w) => w.isNotEmpty ? w[0] : '').take(2).join().toUpperCase()
+        ? userName
+              .split(' ')
+              .map((w) => w.isNotEmpty ? w[0] : '')
+              .take(2)
+              .join()
+              .toUpperCase()
         : 'CE';
 
     return Scaffold(
@@ -93,7 +98,9 @@ class _HomeScreenState extends State<HomeScreen> {
                               Navigator.push(
                                 context,
                                 MaterialPageRoute(
-                                  builder: (_) => user != null ? const SettingsScreen() : const LoginScreen(),
+                                  builder: (_) => user != null
+                                      ? const SettingsScreen()
+                                      : const LoginScreen(),
                                 ),
                               );
                             },
@@ -104,21 +111,28 @@ class _HomeScreenState extends State<HomeScreen> {
                                   height: 44,
                                   decoration: BoxDecoration(
                                     gradient: const LinearGradient(
-                                      colors: [Color(0xFFF43F5E), Color(0xFFE11D48)],
+                                      colors: [
+                                        Color(0xFFF43F5E),
+                                        Color(0xFFE11D48),
+                                      ],
                                       begin: Alignment.topLeft,
                                       end: Alignment.bottomRight,
                                     ),
                                     borderRadius: BorderRadius.circular(14),
                                     boxShadow: [
                                       BoxShadow(
-                                        color: AppColors.primary.withValues(alpha: 0.3),
+                                        color: AppColors.primary.withValues(
+                                          alpha: 0.3,
+                                        ),
                                         blurRadius: 10,
                                         offset: const Offset(0, 3),
                                       ),
                                     ],
                                   ),
                                   clipBehavior: Clip.antiAlias,
-                                  child: user?.avatarImageUrl != null && user!.avatarImageUrl!.isNotEmpty
+                                  child:
+                                      user?.avatarImageUrl != null &&
+                                          user!.avatarImageUrl!.isNotEmpty
                                       ? AppNetworkImage(
                                           imageUrl: user.avatarImageUrl!,
                                           fit: BoxFit.cover,
@@ -149,7 +163,9 @@ class _HomeScreenState extends State<HomeScreen> {
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Text(
-                                      user != null ? 'Halo,' : 'Selamat Datang,',
+                                      user != null
+                                          ? 'Halo,'
+                                          : 'Selamat Datang,',
                                       style: const TextStyle(
                                         fontSize: 11,
                                         color: AppColors.textMuted,
@@ -177,7 +193,9 @@ class _HomeScreenState extends State<HomeScreen> {
                               Navigator.push(
                                 context,
                                 MaterialPageRoute(
-                                  builder: (_) => user != null ? const SettingsScreen() : const LoginScreen(),
+                                  builder: (_) => user != null
+                                      ? const SettingsScreen()
+                                      : const LoginScreen(),
                                 ),
                               );
                             },
@@ -185,12 +203,16 @@ class _HomeScreenState extends State<HomeScreen> {
                               width: 38,
                               height: 38,
                               decoration: BoxDecoration(
-                                color: const Color(0xFF1E293B).withValues(alpha: 0.8),
+                                color: const Color(
+                                  0xFF1E293B,
+                                ).withValues(alpha: 0.8),
                                 borderRadius: BorderRadius.circular(12),
                                 border: Border.all(color: AppColors.border),
                               ),
                               child: Icon(
-                                user != null ? Icons.person_rounded : Icons.login_rounded,
+                                user != null
+                                    ? Icons.person_rounded
+                                    : Icons.login_rounded,
                                 size: 18,
                                 color: AppColors.primaryLight,
                               ),
@@ -218,7 +240,11 @@ class _HomeScreenState extends State<HomeScreen> {
                             const SizedBox(width: 8),
                             _buildFilterPill('Baru Update', 'latest', provider),
                             const SizedBox(width: 8),
-                            _buildFilterPill('Paling Populer', 'popular', provider),
+                            _buildFilterPill(
+                              'Paling Populer',
+                              'popular',
+                              provider,
+                            ),
                             const SizedBox(width: 8),
                             _buildFilterPill('Top Rating', 'rating', provider),
                           ],
@@ -263,26 +289,32 @@ class _HomeScreenState extends State<HomeScreen> {
                       const SliverToBoxAdapter(
                         child: Padding(
                           padding: EdgeInsets.symmetric(vertical: 50),
-                          child: Center(child: GoogleDotsLoading(dotSize: 11, jumpHeight: 14)),
+                          child: Center(
+                            child: GoogleDotsLoading(
+                              dotSize: 11,
+                              jumpHeight: 14,
+                            ),
+                          ),
                         ),
                       )
                     else ...[
                       SliverPadding(
                         padding: const EdgeInsets.symmetric(horizontal: 16),
                         sliver: SliverGrid(
-                          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                            crossAxisCount: 2,
-                            childAspectRatio: 0.58,
-                            crossAxisSpacing: 14,
-                            mainAxisSpacing: 18,
-                          ),
-                          delegate: SliverChildBuilderDelegate(
-                            (context, index) {
-                              final manga = provider.filteredManga[index];
-                              return MangaCard(manga: manga);
-                            },
-                            childCount: provider.filteredManga.length,
-                          ),
+                          gridDelegate:
+                              const SliverGridDelegateWithFixedCrossAxisCount(
+                                crossAxisCount: 2,
+                                childAspectRatio: 0.58,
+                                crossAxisSpacing: 14,
+                                mainAxisSpacing: 18,
+                              ),
+                          delegate: SliverChildBuilderDelegate((
+                            context,
+                            index,
+                          ) {
+                            final manga = provider.filteredManga[index];
+                            return MangaCard(manga: manga);
+                          }, childCount: provider.filteredManga.length),
                         ),
                       ),
                       if (provider.isLoadingMoreFiltered)
@@ -293,7 +325,10 @@ class _HomeScreenState extends State<HomeScreen> {
                               child: SizedBox(
                                 width: 26,
                                 height: 26,
-                                child: CircularProgressIndicator(strokeWidth: 2.5, color: AppColors.primary),
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2.5,
+                                  color: AppColors.primary,
+                                ),
                               ),
                             ),
                           ),
@@ -330,9 +365,14 @@ class _HomeScreenState extends State<HomeScreen> {
                               GestureDetector(
                                 onTap: () => provider.setFilter('latest'),
                                 child: Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 10,
+                                    vertical: 4,
+                                  ),
                                   decoration: BoxDecoration(
-                                    color: const Color(0xFF1E293B).withValues(alpha: 0.8),
+                                    color: const Color(
+                                      0xFF1E293B,
+                                    ).withValues(alpha: 0.8),
                                     borderRadius: BorderRadius.circular(20),
                                     border: Border.all(color: AppColors.border),
                                   ),
@@ -378,9 +418,14 @@ class _HomeScreenState extends State<HomeScreen> {
                               GestureDetector(
                                 onTap: () => provider.setFilter('popular'),
                                 child: Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 10,
+                                    vertical: 4,
+                                  ),
                                   decoration: BoxDecoration(
-                                    color: const Color(0xFF1E293B).withValues(alpha: 0.8),
+                                    color: const Color(
+                                      0xFF1E293B,
+                                    ).withValues(alpha: 0.8),
                                     borderRadius: BorderRadius.circular(20),
                                     border: Border.all(color: AppColors.border),
                                   ),
@@ -403,19 +448,20 @@ class _HomeScreenState extends State<HomeScreen> {
                       SliverPadding(
                         padding: const EdgeInsets.symmetric(horizontal: 16),
                         sliver: SliverGrid(
-                          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                            crossAxisCount: 2,
-                            childAspectRatio: 0.58,
-                            crossAxisSpacing: 14,
-                            mainAxisSpacing: 18,
-                          ),
-                          delegate: SliverChildBuilderDelegate(
-                            (context, index) {
-                              final manga = provider.popularManga[index];
-                              return MangaCard(manga: manga);
-                            },
-                            childCount: provider.popularManga.length,
-                          ),
+                          gridDelegate:
+                              const SliverGridDelegateWithFixedCrossAxisCount(
+                                crossAxisCount: 2,
+                                childAspectRatio: 0.58,
+                                crossAxisSpacing: 14,
+                                mainAxisSpacing: 18,
+                              ),
+                          delegate: SliverChildBuilderDelegate((
+                            context,
+                            index,
+                          ) {
+                            final manga = provider.popularManga[index];
+                            return MangaCard(manga: manga);
+                          }, childCount: provider.popularManga.length),
                         ),
                       ),
 
@@ -424,7 +470,11 @@ class _HomeScreenState extends State<HomeScreen> {
                           child: Padding(
                             padding: EdgeInsets.symmetric(vertical: 24),
                             child: Center(
-                              child: GoogleDotsLoading(dotSize: 9, spacing: 6, jumpHeight: 10),
+                              child: GoogleDotsLoading(
+                                dotSize: 9,
+                                spacing: 6,
+                                jumpHeight: 10,
+                              ),
                             ),
                           ),
                         ),
@@ -441,7 +491,11 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildFilterPill(String label, String filterKey, MangaProvider provider) {
+  Widget _buildFilterPill(
+    String label,
+    String filterKey,
+    MangaProvider provider,
+  ) {
     final isSelected = provider.activeFilter == filterKey;
 
     return GestureDetector(
