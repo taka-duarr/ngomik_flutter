@@ -10,25 +10,116 @@ class AuthProvider with ChangeNotifier {
 
   User? _user;
   String? _token;
+  String? _refreshToken;
+  int? _tokenExpiresAt; // Unix timestamp (seconds)
   bool _isLoading = false;
   String? _errorMessage;
 
   User? get user => _user;
   String? get token => _token;
+  String? get refreshToken => _refreshToken;
   bool get isLoggedIn => _user != null;
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
 
+  /// True if the access_token is expired or will expire within 5 minutes
+  bool get isTokenExpired {
+    if (_token == null) return true;
+    if (_tokenExpiresAt == null) return false;
+    final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    return now >= (_tokenExpiresAt! - 300); // 5-min buffer
+  }
+
+  /// True if user has a valid refresh token (session can be extended)
+  bool get hasRefreshToken =>
+      _refreshToken != null && _refreshToken!.isNotEmpty;
+
   Future<void> init() async {
     _token = await _storageService.getToken();
+    _refreshToken = await _storageService.getRefreshToken();
+    _tokenExpiresAt = await _storageService.getTokenExpiresAt();
     _user = await _storageService.getUser();
     notifyListeners();
 
-    if (_token != null && _token!.isNotEmpty) {
+    // Try to refresh profile if token looks still valid (best-effort)
+    if (_token != null && _token!.isNotEmpty && !isTokenExpired) {
       await refreshProfile();
+    }
+    // If token expired but we have user data, keep showing cached profile
+    // (no force-logout)
+  }
+
+  /// Login using a Supabase session cookie (lasts ~60 days)
+  /// Accepts the full cookie string: "sb-kratos-auth-token.0=base64-eyJ..."
+  Future<bool> loginWithSupabaseCookie(String cookieStr) async {
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+
+    try {
+      final session = ClipboardHelper.parseSupabaseCookie(cookieStr);
+      if (session == null) {
+        _errorMessage =
+            'Cookie tidak lengkap atau terpotong.\n\n'
+            'Gunakan cara ini:\n'
+            '1. Buka Console (F12) di browser\n'
+            '2. Ketik: copy(document.cookie)\n'
+            '3. Tekan Enter → Tempel ke aplikasi\n\n'
+            'Jangan salin dari Application tab karena nilainya bisa terpotong!';
+        _isLoading = false;
+        notifyListeners();
+        return false;
+      }
+
+      final accessToken = session['access_token'] as String?;
+      final refreshTok = session['refresh_token'] as String?;
+      final expiresAt = session['expires_at'];
+
+      if (accessToken == null || accessToken.isEmpty) {
+        _errorMessage = 'Access token tidak ditemukan di dalam cookie.';
+        _isLoading = false;
+        notifyListeners();
+        return false;
+      }
+
+      // Verify the access token with the API
+      final profile = await _apiService.fetchUserProfile(accessToken);
+      if (profile != null) {
+        _user = profile.copyWith(token: accessToken);
+        _token = accessToken;
+        _refreshToken = refreshTok;
+        _tokenExpiresAt = expiresAt is int
+            ? expiresAt
+            : int.tryParse(expiresAt?.toString() ?? '');
+
+        await _storageService.saveToken(accessToken);
+        await _storageService.saveUser(_user!);
+        if (_refreshToken != null) {
+          await _storageService.saveRefreshToken(_refreshToken!);
+        }
+        if (_tokenExpiresAt != null) {
+          await _storageService.saveTokenExpiresAt(_tokenExpiresAt!);
+        }
+
+        _isLoading = false;
+        notifyListeners();
+        return true;
+      } else {
+        _errorMessage = 'Cookie tidak valid atau sudah kedaluwarsa. Silakan salin cookie baru.';
+        _isLoading = false;
+        notifyListeners();
+        return false;
+      }
+    } catch (e) {
+      debugPrint('loginWithSupabaseCookie error: $e');
+      _errorMessage = 'Gagal memproses cookie: $e';
+      _isLoading = false;
+      notifyListeners();
+      return false;
     }
   }
 
+  /// Legacy login with Bearer token (still supported)
   Future<bool> loginWithToken(String inputToken) async {
     _isLoading = true;
     _errorMessage = null;
@@ -41,6 +132,8 @@ class AuthProvider with ChangeNotifier {
       if (profile != null) {
         _user = profile.copyWith(token: clean);
         _token = clean;
+        _refreshToken = null;
+        _tokenExpiresAt = null;
         await _storageService.saveToken(clean);
         await _storageService.saveUser(_user!);
         _isLoading = false;
@@ -53,7 +146,7 @@ class AuthProvider with ChangeNotifier {
         return false;
       }
     } catch (e) {
-      _errorMessage = 'Gagal memverifikasi akun: ';
+      _errorMessage = 'Gagal memverifikasi akun.';
       _isLoading = false;
       notifyListeners();
       return false;
@@ -69,12 +162,15 @@ class AuthProvider with ChangeNotifier {
         await _storageService.saveUser(_user!);
         notifyListeners();
       }
+      // If 401, don't logout — just keep cached profile
     } catch (_) {}
   }
 
   Future<void> logout() async {
     _user = null;
     _token = null;
+    _refreshToken = null;
+    _tokenExpiresAt = null;
     await _storageService.clearToken();
     notifyListeners();
   }

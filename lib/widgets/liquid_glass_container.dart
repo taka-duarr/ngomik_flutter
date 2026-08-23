@@ -33,36 +33,57 @@ class LiquidGlassContainer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    Widget content = ClipRRect(
-      borderRadius: BorderRadius.circular(borderRadius),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: blur, sigmaY: blur),
-        child: Container(
-          width: width,
-          height: height,
-          padding: padding,
-          decoration: BoxDecoration(
-            color: color ?? Colors.black.withValues(alpha: 0.35),
-            gradient: gradient,
-            borderRadius: BorderRadius.circular(borderRadius),
-            border: border ??
-                Border.all(
-                  color: Colors.white.withValues(alpha: 0.22),
-                  width: 1.0,
-                ),
-            boxShadow: boxShadow ??
-                [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.35),
-                    blurRadius: 18,
-                    offset: const Offset(0, 6),
-                  ),
-                ],
+    final boxDecoration = BoxDecoration(
+      color: color ?? Colors.black.withValues(alpha: 0.40),
+      gradient: gradient ??
+          LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              Colors.white.withValues(alpha: 0.12),
+              Colors.white.withValues(alpha: 0.03),
+            ],
           ),
-          child: child,
-        ),
-      ),
+      borderRadius: BorderRadius.circular(borderRadius),
+      border: border ??
+          Border.all(
+            color: Colors.white.withValues(alpha: 0.20),
+            width: 1.0,
+          ),
+      boxShadow: boxShadow ??
+          [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.35),
+              blurRadius: 16,
+              offset: const Offset(0, 5),
+            ),
+          ],
     );
+
+    Widget content;
+    if (blur > 0) {
+      content = ClipRRect(
+        borderRadius: BorderRadius.circular(borderRadius),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: blur, sigmaY: blur),
+          child: Container(
+            width: width,
+            height: height,
+            padding: padding,
+            decoration: boxDecoration,
+            child: child,
+          ),
+        ),
+      );
+    } else {
+      content = Container(
+        width: width,
+        height: height,
+        padding: padding,
+        decoration: boxDecoration,
+        child: child,
+      );
+    }
 
     if (margin != null) {
       content = Padding(padding: margin!, child: content);

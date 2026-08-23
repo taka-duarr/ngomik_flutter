@@ -13,13 +13,13 @@ class CommentsSheet extends StatefulWidget {
   final String path;
   final String title;
 
-  const CommentsSheet({
-    super.key,
-    required this.path,
-    required this.title,
-  });
+  const CommentsSheet({super.key, required this.path, required this.title});
 
-  static void show(BuildContext context, {required String path, required String title}) {
+  static void show(
+    BuildContext context, {
+    required String path,
+    required String title,
+  }) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -64,7 +64,11 @@ class _CommentsSheetState extends State<CommentsSheet> {
     }
     setState(() => _isLoading = _page == 1);
 
-    final res = await _apiService.fetchComments(widget.path, page: _page, pageSize: 20);
+    final res = await _apiService.fetchComments(
+      widget.path,
+      page: _page,
+      pageSize: 20,
+    );
 
     if (mounted) {
       setState(() {
@@ -165,7 +169,11 @@ class _CommentsSheetState extends State<CommentsSheet> {
                     children: [
                       Row(
                         children: [
-                          const Icon(Icons.chat_bubble_outline_rounded, color: AppColors.primary, size: 20),
+                          const Icon(
+                            Icons.chat_bubble_outline_rounded,
+                            color: AppColors.primary,
+                            size: 20,
+                          ),
                           const SizedBox(width: 8),
                           Text(
                             'Komentar (${_totalCount > 0 ? _totalCount : _comments.length})',
@@ -178,7 +186,11 @@ class _CommentsSheetState extends State<CommentsSheet> {
                         ],
                       ),
                       IconButton(
-                        icon: const Icon(Icons.close_rounded, color: Colors.white70, size: 20),
+                        icon: const Icon(
+                          Icons.close_rounded,
+                          color: Colors.white70,
+                          size: 20,
+                        ),
                         onPressed: () => Navigator.pop(context),
                       ),
                     ],
@@ -191,54 +203,67 @@ class _CommentsSheetState extends State<CommentsSheet> {
             // Comments List Body
             Expanded(
               child: _isLoading
-                  ? const Center(child: GoogleDotsLoading(dotSize: 11, jumpHeight: 14))
+                  ? const Center(
+                      child: GoogleDotsLoading(dotSize: 11, jumpHeight: 14),
+                    )
                   : _comments.isEmpty
-                      ? Center(
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(
-                                Icons.chat_bubble_outline_rounded,
-                                size: 48,
-                                color: Colors.white.withValues(alpha: 0.3),
-                              ),
-                              const SizedBox(height: 10),
-                              const Text(
-                                'Belum ada komentar.\nJadilah yang pertama berkomentar!',
-                                textAlign: TextAlign.center,
-                                style: TextStyle(color: AppColors.textMuted, fontSize: 13),
-                              ),
-                            ],
+                  ? Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.chat_bubble_outline_rounded,
+                            size: 48,
+                            color: Colors.white.withValues(alpha: 0.3),
                           ),
-                        )
-                      : ListView.separated(
-                          controller: _scrollController,
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                          itemCount: _comments.length + (_page < _totalPages ? 1 : 0),
-                          separatorBuilder: (context, index) => const SizedBox(height: 12),
-                          itemBuilder: (context, index) {
-                            if (index == _comments.length) {
-                              return Center(
-                                child: TextButton(
-                                  onPressed: _isLoadingMore ? null : _loadMore,
-                                  child: _isLoadingMore
-                                      ? const GoogleDotsLoading(dotSize: 8, jumpHeight: 10)
-                                      : const Text(
-                                          'Muat Komentar Lainnya',
-                                          style: TextStyle(
-                                            color: AppColors.primary,
-                                            fontWeight: FontWeight.w700,
-                                            fontSize: 12.5,
-                                          ),
-                                        ),
-                                ),
-                              );
-                            }
+                          const SizedBox(height: 10),
+                          const Text(
+                            'Belum ada komentar.\nJadilah yang pertama berkomentar!',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              color: AppColors.textMuted,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ],
+                      ),
+                    )
+                  : ListView.separated(
+                      controller: _scrollController,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 12,
+                      ),
+                      itemCount:
+                          _comments.length + (_page < _totalPages ? 1 : 0),
+                      separatorBuilder: (context, index) =>
+                          const SizedBox(height: 12),
+                      itemBuilder: (context, index) {
+                        if (index == _comments.length) {
+                          return Center(
+                            child: TextButton(
+                              onPressed: _isLoadingMore ? null : _loadMore,
+                              child: _isLoadingMore
+                                  ? const GoogleDotsLoading(
+                                      dotSize: 8,
+                                      jumpHeight: 10,
+                                    )
+                                  : const Text(
+                                      'Muat Komentar Lainnya',
+                                      style: TextStyle(
+                                        color: AppColors.primary,
+                                        fontWeight: FontWeight.w700,
+                                        fontSize: 12.5,
+                                      ),
+                                    ),
+                            ),
+                          );
+                        }
 
-                            final c = _comments[index];
-                            return _buildCommentTile(c);
-                          },
-                        ),
+                        final c = _comments[index];
+                        return _buildCommentTile(c);
+                      },
+                    ),
             ),
 
             // Bottom Input Bar
@@ -256,15 +281,26 @@ class _CommentsSheetState extends State<CommentsSheet> {
                       decoration: BoxDecoration(
                         color: Colors.white.withValues(alpha: 0.08),
                         borderRadius: BorderRadius.circular(22),
-                        border: Border.all(color: Colors.white.withValues(alpha: 0.16)),
+                        border: Border.all(
+                          color: Colors.white.withValues(alpha: 0.16),
+                        ),
                       ),
                       child: TextField(
                         controller: _commentCtrl,
-                        style: const TextStyle(color: Colors.white, fontSize: 13),
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 13,
+                        ),
                         decoration: const InputDecoration(
                           hintText: 'Tulis komentar...',
-                          hintStyle: TextStyle(color: AppColors.textMuted, fontSize: 12.5),
-                          contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                          hintStyle: TextStyle(
+                            color: AppColors.textMuted,
+                            fontSize: 12.5,
+                          ),
+                          contentPadding: EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 10,
+                          ),
                           border: InputBorder.none,
                         ),
                       ),
@@ -283,9 +319,16 @@ class _CommentsSheetState extends State<CommentsSheet> {
                           ? const SizedBox(
                               width: 16,
                               height: 16,
-                              child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
+                              ),
                             )
-                          : const Icon(Icons.send_rounded, color: Colors.white, size: 18),
+                          : const Icon(
+                              Icons.send_rounded,
+                              color: Colors.white,
+                              size: 18,
+                            ),
                       onPressed: _isSending ? null : _submitComment,
                     ),
                   ),
@@ -327,7 +370,9 @@ class _CommentsSheetState extends State<CommentsSheet> {
                         color: AppColors.primary.withValues(alpha: 0.2),
                         child: Center(
                           child: Text(
-                            comment.nick.isNotEmpty ? comment.nick[0].toUpperCase() : 'U',
+                            comment.nick.isNotEmpty
+                                ? comment.nick[0].toUpperCase()
+                                : 'U',
                             style: const TextStyle(
                               color: AppColors.primary,
                               fontWeight: FontWeight.w800,
@@ -366,14 +411,28 @@ class _CommentsSheetState extends State<CommentsSheet> {
           const SizedBox(height: 8),
 
           // Comment Text Body
-          Text(
-            comment.cleanComment,
-            style: TextStyle(
-              fontSize: 12.5,
-              color: Colors.white.withValues(alpha: 0.88),
-              height: 1.45,
+          if (comment.cleanComment.isNotEmpty) ...[
+            Text(
+              comment.cleanComment,
+              style: TextStyle(
+                fontSize: 12.5,
+                color: Colors.white.withValues(alpha: 0.88),
+                height: 1.45,
+              ),
             ),
-          ),
+          ],
+
+          // Attached Images & Emotes / Stickers
+          if (comment.imageUrls.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                for (final img in comment.imageUrls) _buildCommentMedia(img),
+              ],
+            ),
+          ],
 
           // Nested Replies
           if (comment.replies.isNotEmpty) ...[
@@ -381,11 +440,114 @@ class _CommentsSheetState extends State<CommentsSheet> {
             Padding(
               padding: const EdgeInsets.only(left: 12),
               child: Column(
-                children: comment.replies.map((r) => _buildCommentTile(r)).toList(),
+                children: comment.replies
+                    .map((r) => _buildCommentTile(r))
+                    .toList(),
               ),
             ),
           ],
         ],
+      ),
+    );
+  }
+
+  bool _isEmoteOrSticker(String url) {
+    final lower = url.toLowerCase();
+    return lower.contains('emoji') ||
+        lower.contains('sticker') ||
+        lower.contains('pepe') ||
+        lower.contains('alu') ||
+        lower.contains('aru') ||
+        lower.contains('tieba') ||
+        lower.contains('bilibili') ||
+        lower.contains('weibo') ||
+        lower.contains('qq') ||
+        lower.contains('blob') ||
+        lower.contains('emot') ||
+        lower.contains('menhera') ||
+        lower.contains('twemoji') ||
+        lower.contains('bplus') ||
+        lower.contains('wl-emoji') ||
+        lower.contains('/sticker/') ||
+        lower.contains('/stickers/') ||
+        lower.contains('/emojis/') ||
+        lower.contains('/emoji/');
+  }
+
+  void _showImagePreview(String imageUrl) {
+    showDialog(
+      context: context,
+      barrierColor: Colors.black.withValues(alpha: 0.92),
+      builder: (ctx) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.all(12),
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            InteractiveViewer(
+              minScale: 0.5,
+              maxScale: 4.0,
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: AppNetworkImage(imageUrl: imageUrl, fit: BoxFit.contain),
+              ),
+            ),
+            Positioned(
+              top: 8,
+              right: 8,
+              child: IconButton(
+                icon: const Icon(
+                  Icons.close_rounded,
+                  color: Colors.white,
+                  size: 28,
+                ),
+                onPressed: () => Navigator.pop(ctx),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCommentMedia(String url) {
+    final isSticker = _isEmoteOrSticker(url);
+
+    if (isSticker) {
+      return Container(
+        constraints: const BoxConstraints(
+          maxWidth: 80,
+          maxHeight: 80,
+          minWidth: 44,
+          minHeight: 44,
+        ),
+        child: AppNetworkImage(
+          imageUrl: url,
+          fit: BoxFit.contain,
+          alignment: Alignment.centerLeft,
+        ),
+      );
+    }
+
+    // Regular image: keep it large and clear with full width & zoom support
+    return GestureDetector(
+      onTap: () => _showImagePreview(url),
+      child: Container(
+        width: double.infinity,
+        margin: const EdgeInsets.symmetric(vertical: 4),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(14),
+          child: AppNetworkImage(
+            imageUrl: url,
+            width: double.infinity,
+            fit: BoxFit.fitWidth,
+            alignment: Alignment.center,
+          ),
+        ),
       ),
     );
   }

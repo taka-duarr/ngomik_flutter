@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:provider/provider.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/utils/clipboard_helper.dart';
@@ -566,16 +567,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ],
                     ),
                     ElevatedButton.icon(
-                      onPressed: () {
+                      onPressed: () async {
                         PaintingBinding.instance.imageCache.clear();
                         PaintingBinding.instance.imageCache.clearLiveImages();
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Cache gambar berhasil dibersihkan!'),
-                            backgroundColor: AppColors.emerald,
-                            duration: Duration(seconds: 2),
-                          ),
-                        );
+                        try {
+                          await DefaultCacheManager().emptyCache();
+                        } catch (_) {}
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Seluruh file cache berhasil dibersihkan!'),
+                              backgroundColor: AppColors.emerald,
+                              duration: Duration(seconds: 2),
+                            ),
+                          );
+                        }
                       },
                       icon: const Icon(Icons.cleaning_services_rounded, size: 14, color: Colors.white),
                       label: const Text(

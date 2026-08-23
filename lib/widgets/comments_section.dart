@@ -7,17 +7,12 @@ import '../services/shngm_api_service.dart';
 import '../providers/auth_provider.dart';
 import 'app_network_image.dart';
 import 'google_dots_loading.dart';
-import 'liquid_glass_container.dart';
 
 class CommentsSection extends StatefulWidget {
   final String path;
   final String title;
 
-  const CommentsSection({
-    super.key,
-    required this.path,
-    required this.title,
-  });
+  const CommentsSection({super.key, required this.path, required this.title});
 
   @override
   State<CommentsSection> createState() => _CommentsSectionState();
@@ -146,7 +141,11 @@ class _CommentsSectionState extends State<CommentsSection> {
           // Section Title (💬 Komentar Komik (1755))
           Row(
             children: [
-              const Icon(Icons.chat_bubble_outline_rounded, color: Colors.white, size: 18),
+              const Icon(
+                Icons.chat_bubble_outline_rounded,
+                color: Colors.white,
+                size: 18,
+              ),
               const SizedBox(width: 8),
               Text(
                 'Komentar Komik (${_totalCount > 0 ? _totalCount : _comments.length})',
@@ -160,13 +159,28 @@ class _CommentsSectionState extends State<CommentsSection> {
             ],
           ),
           const SizedBox(height: 14),
-
-          // LIQUID GLASS WRITE COMMENT BOX
-          LiquidGlassContainer(
-            borderRadius: 18,
-            blur: 16,
-            color: Colors.white.withValues(alpha: 0.07),
-            border: Border.all(color: Colors.white.withValues(alpha: 0.18)),
+          // SPECULAR GLASS WRITE COMMENT BOX (Zero GPU lag)
+          Container(
+            decoration: BoxDecoration(
+              color: const Color(0xFF131826).withValues(alpha: 0.85),
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  Colors.white.withValues(alpha: 0.09),
+                  Colors.white.withValues(alpha: 0.02),
+                ],
+              ),
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.16)),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.3),
+                  blurRadius: 14,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
             padding: const EdgeInsets.all(14),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.end,
@@ -196,17 +210,30 @@ class _CommentsSectionState extends State<CommentsSection> {
                         ? const SizedBox(
                             width: 14,
                             height: 14,
-                            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
                           )
-                        : const Icon(Icons.send_rounded, size: 13, color: Colors.white),
+                        : const Icon(
+                            Icons.send_rounded,
+                            size: 13,
+                            color: Colors.white,
+                          ),
                     label: const Text(
                       'Kirim',
-                      style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w800, color: Colors.white),
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w800,
+                        color: Colors.white,
+                      ),
                     ),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppColors.primary,
                       padding: const EdgeInsets.symmetric(horizontal: 14),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
                     ),
                   ),
                 ),
@@ -215,11 +242,13 @@ class _CommentsSectionState extends State<CommentsSection> {
           ),
           const SizedBox(height: 14),
 
-          // Comments List
+          // Comments List (Fast rendering with zero live BackdropFilter overhead)
           if (_isLoading)
             const Padding(
               padding: EdgeInsets.symmetric(vertical: 24),
-              child: Center(child: GoogleDotsLoading(dotSize: 10, jumpHeight: 14)),
+              child: Center(
+                child: GoogleDotsLoading(dotSize: 10, jumpHeight: 14),
+              ),
             )
           else if (_comments.isEmpty)
             Center(
@@ -236,49 +265,61 @@ class _CommentsSectionState extends State<CommentsSection> {
                     const Text(
                       'Belum ada komentar.\nJadilah yang pertama berkomentar!',
                       textAlign: TextAlign.center,
-                      style: TextStyle(color: AppColors.textMuted, fontSize: 12.5),
+                      style: TextStyle(
+                        color: AppColors.textMuted,
+                        fontSize: 12.5,
+                      ),
                     ),
                   ],
                 ),
               ),
             )
-          else ...[
-            ListView.separated(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              itemCount: _comments.length,
-              separatorBuilder: (context, index) => const SizedBox(height: 12),
-              itemBuilder: (context, index) {
-                final c = _comments[index];
-                return _buildCommentCard(c);
-              },
-            ),
+          else
+            Column(
+              children: [
+                ...List.generate(_comments.length, (index) {
+                  final c = _comments[index];
+                  return Padding(
+                    padding: EdgeInsets.only(
+                      bottom: index < _comments.length - 1 ? 12 : 0,
+                    ),
+                    child: _buildCommentCard(c),
+                  );
+                }),
 
-            // Load more button
-            if (_page < _totalPages) ...[
-              const SizedBox(height: 14),
-              Center(
-                child: TextButton.icon(
-                  onPressed: _isLoadingMore ? null : _loadMore,
-                  icon: _isLoadingMore
-                      ? const SizedBox(
-                          width: 14,
-                          height: 14,
-                          child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary),
-                        )
-                      : const Icon(Icons.expand_more_rounded, size: 18, color: AppColors.primary),
-                  label: const Text(
-                    'Muat Komentar Lainnya',
-                    style: TextStyle(
-                      color: AppColors.primary,
-                      fontWeight: FontWeight.w700,
-                      fontSize: 12.5,
+                // Load more button
+                if (_page < _totalPages) ...[
+                  const SizedBox(height: 14),
+                  Center(
+                    child: TextButton.icon(
+                      onPressed: _isLoadingMore ? null : _loadMore,
+                      icon: _isLoadingMore
+                          ? const SizedBox(
+                              width: 14,
+                              height: 14,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: AppColors.primary,
+                              ),
+                            )
+                          : const Icon(
+                              Icons.expand_more_rounded,
+                              size: 18,
+                              color: AppColors.primary,
+                            ),
+                      label: const Text(
+                        'Muat Komentar Lainnya',
+                        style: TextStyle(
+                          color: AppColors.primary,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 12.5,
+                        ),
+                      ),
                     ),
                   ),
-                ),
-              ),
-            ],
-          ],
+                ],
+              ],
+            ),
         ],
       ),
     );
@@ -290,13 +331,31 @@ class _CommentsSectionState extends State<CommentsSection> {
     final text = comment.cleanComment;
     final isLongText = text.length > 220;
 
-    return LiquidGlassContainer(
-      borderRadius: 18,
-      blur: 20,
-      color: isReply ? Colors.black.withValues(alpha: 0.5) : Colors.white.withValues(alpha: 0.08),
-      border: Border.all(
-        color: Colors.white.withValues(alpha: isReply ? 0.12 : 0.18),
-        width: 0.9,
+    return Container(
+      decoration: BoxDecoration(
+        color: isReply
+            ? const Color(0xFF161C2C).withValues(alpha: 0.85)
+            : const Color(0xFF0F1523).withValues(alpha: 0.90),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Colors.white.withValues(alpha: isReply ? 0.08 : 0.10),
+            Colors.white.withValues(alpha: 0.02),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: isReply ? 0.10 : 0.15),
+          width: 1.0,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.25),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
+          ),
+        ],
       ),
       padding: const EdgeInsets.all(14),
       child: Column(
@@ -320,7 +379,9 @@ class _CommentsSectionState extends State<CommentsSection> {
                         color: AppColors.primary.withValues(alpha: 0.3),
                         child: Center(
                           child: Text(
-                            comment.nick.isNotEmpty ? comment.nick[0].toUpperCase() : 'U',
+                            comment.nick.isNotEmpty
+                                ? comment.nick[0].toUpperCase()
+                                : 'U',
                             style: const TextStyle(
                               color: Colors.white,
                               fontWeight: FontWeight.w800,
@@ -352,7 +413,10 @@ class _CommentsSectionState extends State<CommentsSection> {
                         const SizedBox(width: 6),
                         // Lv. 1 Pill Badge
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 1.5,
+                          ),
                           decoration: BoxDecoration(
                             color: const Color(0xFF4C1D38),
                             borderRadius: BorderRadius.circular(10),
@@ -387,7 +451,9 @@ class _CommentsSectionState extends State<CommentsSection> {
           // Comment Text Body
           if (text.isNotEmpty) ...[
             Text(
-              (!isExpandedText && isLongText) ? '${text.substring(0, 220)}...' : text,
+              (!isExpandedText && isLongText)
+                  ? '${text.substring(0, 220)}...'
+                  : text,
               style: TextStyle(
                 fontSize: 12.5,
                 color: Colors.white.withValues(alpha: 0.92),
@@ -419,42 +485,51 @@ class _CommentsSectionState extends State<CommentsSection> {
               ),
           ],
 
-          // Attached Images
+          // Attached Images & Emotes / Stickers
           if (comment.imageUrls.isNotEmpty) ...[
             const SizedBox(height: 8),
-            for (final img in comment.imageUrls)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 6),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(12),
-                  child: AppNetworkImage(
-                    imageUrl: img,
-                    width: double.infinity,
-                    fit: BoxFit.cover,
-                  ),
-                ),
-              ),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                for (final img in comment.imageUrls) _buildCommentMedia(img),
+              ],
+            ),
           ],
 
           const SizedBox(height: 10),
 
-          // Action Buttons: Liquid Glass Like Pill (❤ 103) & Reply Expander (⤷ Lihat 21 Balasan ⌄)
+          // Action Buttons: Specular Glass Like Pill (❤ 103) & Reply Expander (⤷ Lihat 21 Balasan ⌄)
           Row(
             children: [
-              // Liquid Glass Like Pill
-              LiquidGlassContainer(
-                borderRadius: 16,
-                blur: 14,
-                color: const Color(0x66331422),
-                border: Border.all(
-                  color: const Color(0xFF8B2550).withValues(alpha: 0.7),
-                  width: 0.8,
+              // Specular Glass Like Pill
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 4,
                 ),
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: const Color(0x66331422),
+                  gradient: LinearGradient(
+                    colors: [
+                      const Color(0xFFFF0055).withValues(alpha: 0.20),
+                      const Color(0xFFFF0055).withValues(alpha: 0.05),
+                    ],
+                  ),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: const Color(0xFF8B2550).withValues(alpha: 0.7),
+                    width: 0.8,
+                  ),
+                ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(Icons.favorite_rounded, color: Color(0xFFFF4D8D), size: 13),
+                    const Icon(
+                      Icons.favorite_rounded,
+                      color: Color(0xFFFF4D8D),
+                      size: 13,
+                    ),
                     const SizedBox(width: 4),
                     Text(
                       '${comment.like}',
@@ -470,43 +545,67 @@ class _CommentsSectionState extends State<CommentsSection> {
             ],
           ),
 
-          // Liquid Glass Replies Button
+          // Specular Glass Replies Button
           if (comment.replies.isNotEmpty) ...[
             const SizedBox(height: 10),
-            LiquidGlassContainer(
-              borderRadius: 12,
-              blur: 14,
-              color: Colors.white.withValues(alpha: 0.08),
-              border: Border.all(color: Colors.white.withValues(alpha: 0.16)),
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-              onTap: () {
-                setState(() {
-                  if (isExpandedReply) {
-                    _expandedReplies.remove(comment.id);
-                  } else {
-                    _expandedReplies.add(comment.id);
-                  }
-                });
-              },
-              child: Row(
-                children: [
-                  const Icon(Icons.subdirectory_arrow_right_rounded, color: Colors.white70, size: 15),
-                  const SizedBox(width: 6),
-                  Text(
-                    'Lihat ${comment.replies.length} Balasan',
-                    style: const TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
-                      color: Colors.white,
+            Material(
+              color: Colors.transparent,
+              child: InkWell(
+                borderRadius: BorderRadius.circular(12),
+                onTap: () {
+                  setState(() {
+                    if (isExpandedReply) {
+                      _expandedReplies.remove(comment.id);
+                    } else {
+                      _expandedReplies.add(comment.id);
+                    }
+                  });
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 8,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.06),
+                    gradient: LinearGradient(
+                      colors: [
+                        Colors.white.withValues(alpha: 0.10),
+                        Colors.white.withValues(alpha: 0.02),
+                      ],
+                    ),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: Colors.white.withValues(alpha: 0.16),
                     ),
                   ),
-                  const Spacer(),
-                  Icon(
-                    isExpandedReply ? Icons.keyboard_arrow_up_rounded : Icons.keyboard_arrow_down_rounded,
-                    color: Colors.white70,
-                    size: 18,
+                  child: Row(
+                    children: [
+                      const Icon(
+                        Icons.subdirectory_arrow_right_rounded,
+                        color: Colors.white70,
+                        size: 15,
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        'Lihat ${comment.replies.length} Balasan',
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.white,
+                        ),
+                      ),
+                      const Spacer(),
+                      Icon(
+                        isExpandedReply
+                            ? Icons.keyboard_arrow_up_rounded
+                            : Icons.keyboard_arrow_down_rounded,
+                        color: Colors.white70,
+                        size: 18,
+                      ),
+                    ],
                   ),
-                ],
+                ),
               ),
             ),
 
@@ -517,16 +616,119 @@ class _CommentsSectionState extends State<CommentsSection> {
                 padding: const EdgeInsets.only(left: 8),
                 child: Column(
                   children: comment.replies
-                      .map((r) => Padding(
-                            padding: const EdgeInsets.only(bottom: 8),
-                            child: _buildCommentCard(r, isReply: true),
-                          ))
+                      .map(
+                        (r) => Padding(
+                          padding: const EdgeInsets.only(bottom: 8),
+                          child: _buildCommentCard(r, isReply: true),
+                        ),
+                      )
                       .toList(),
                 ),
               ),
             ],
           ],
         ],
+      ),
+    );
+  }
+
+  bool _isEmoteOrSticker(String url) {
+    final lower = url.toLowerCase();
+    return lower.contains('emoji') ||
+        lower.contains('sticker') ||
+        lower.contains('pepe') ||
+        lower.contains('alu') ||
+        lower.contains('aru') ||
+        lower.contains('tieba') ||
+        lower.contains('bilibili') ||
+        lower.contains('weibo') ||
+        lower.contains('qq') ||
+        lower.contains('blob') ||
+        lower.contains('emot') ||
+        lower.contains('menhera') ||
+        lower.contains('twemoji') ||
+        lower.contains('bplus') ||
+        lower.contains('wl-emoji') ||
+        lower.contains('/sticker/') ||
+        lower.contains('/stickers/') ||
+        lower.contains('/emojis/') ||
+        lower.contains('/emoji/');
+  }
+
+  void _showImagePreview(String imageUrl) {
+    showDialog(
+      context: context,
+      barrierColor: Colors.black.withValues(alpha: 0.92),
+      builder: (ctx) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.all(12),
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            InteractiveViewer(
+              minScale: 0.5,
+              maxScale: 4.0,
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: AppNetworkImage(imageUrl: imageUrl, fit: BoxFit.contain),
+              ),
+            ),
+            Positioned(
+              top: 8,
+              right: 8,
+              child: IconButton(
+                icon: const Icon(
+                  Icons.close_rounded,
+                  color: Colors.white,
+                  size: 28,
+                ),
+                onPressed: () => Navigator.pop(ctx),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCommentMedia(String url) {
+    final isSticker = _isEmoteOrSticker(url);
+
+    if (isSticker) {
+      return Container(
+        constraints: const BoxConstraints(
+          maxWidth: 80,
+          maxHeight: 80,
+          minWidth: 44,
+          minHeight: 44,
+        ),
+        child: AppNetworkImage(
+          imageUrl: url,
+          fit: BoxFit.contain,
+          alignment: Alignment.centerLeft,
+        ),
+      );
+    }
+
+    // Regular image: keep it large and clear with full width & zoom support
+    return GestureDetector(
+      onTap: () => _showImagePreview(url),
+      child: Container(
+        width: double.infinity,
+        margin: const EdgeInsets.symmetric(vertical: 4),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(14),
+          child: AppNetworkImage(
+            imageUrl: url,
+            width: double.infinity,
+            fit: BoxFit.fitWidth,
+            alignment: Alignment.center,
+          ),
+        ),
       ),
     );
   }

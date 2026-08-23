@@ -60,7 +60,10 @@ class HistoryProvider with ChangeNotifier {
   Future<void> syncMangaChapterHistory(String mangaId, String token) async {
     if (token.isEmpty) return;
     try {
-      final readIds = await _apiService.fetchMangaChapterHistory(mangaId, token);
+      final readIds = await _apiService.fetchMangaChapterHistory(
+        mangaId,
+        token,
+      );
       if (readIds.isNotEmpty) {
         bool hasNew = false;
         for (final chId in readIds) {

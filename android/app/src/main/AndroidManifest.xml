@@ -4,7 +4,7 @@
     
     
     <application
-        android:label="ngomik_flutter"
+        android:label="ngomik"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity
