@@ -5,6 +5,7 @@ import '../../core/utils/clipboard_helper.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/bookmark_provider.dart';
 import '../../providers/history_provider.dart';
+import 'webview_login_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -13,30 +14,20 @@ class LoginScreen extends StatefulWidget {
   State<LoginScreen> createState() => _LoginScreenState();
 }
 
-class _LoginScreenState extends State<LoginScreen>
-    with SingleTickerProviderStateMixin {
+class _LoginScreenState extends State<LoginScreen> {
   final TextEditingController _inputCtrl = TextEditingController();
-  late TabController _tabController;
   bool _autoDetected = false;
-  bool _isCookieMode = true; // Default to Cookie mode (longer session)
+  bool _isManualExpanded = false;
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this, initialIndex: 0);
-    _tabController.addListener(() {
-      setState(() => _isCookieMode = _tabController.index == 0);
-      _inputCtrl.clear();
-      setState(() => _autoDetected = false);
-      _checkClipboard();
-    });
     _checkClipboard();
   }
 
   @override
   void dispose() {
     _inputCtrl.dispose();
-    _tabController.dispose();
     super.dispose();
   }
 
@@ -45,15 +36,11 @@ class _LoginScreenState extends State<LoginScreen>
     if (clipText == null || !mounted) return;
     final trimmed = clipText.trim();
 
-    if (_isCookieMode && ClipboardHelper.isSupabaseCookie(trimmed)) {
+    if (ClipboardHelper.isShinigamiToken(trimmed) || ClipboardHelper.isSupabaseCookie(trimmed)) {
       setState(() {
         _inputCtrl.text = trimmed;
         _autoDetected = true;
-      });
-    } else if (!_isCookieMode && ClipboardHelper.isShinigamiToken(trimmed)) {
-      setState(() {
-        _inputCtrl.text = trimmed;
-        _autoDetected = true;
+        _isManualExpanded = true;
       });
     }
   }
@@ -63,21 +50,26 @@ class _LoginScreenState extends State<LoginScreen>
     if (clipText != null && clipText.isNotEmpty && mounted) {
       setState(() {
         _inputCtrl.text = clipText.trim();
-        _autoDetected = _isCookieMode
-            ? ClipboardHelper.isSupabaseCookie(clipText)
-            : ClipboardHelper.isShinigamiToken(clipText);
+        _autoDetected = ClipboardHelper.isShinigamiToken(clipText) || ClipboardHelper.isSupabaseCookie(clipText);
       });
     }
   }
 
-  Future<void> _submitLogin() async {
-    if (_inputCtrl.text.trim().isEmpty) {
+  Future<void> _openWebViewLogin() async {
+    final result = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(builder: (_) => const WebViewLoginScreen()),
+    );
+    if (result == true && mounted) {
+      Navigator.pop(context);
+    }
+  }
+
+  Future<void> _submitManualLogin() async {
+    final text = _inputCtrl.text.trim();
+    if (text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(_isCookieMode
-              ? 'Silakan tempel cookie Supabase Anda.'
-              : 'Silakan masukkan token otorisasi.'),
-        ),
+        const SnackBar(content: Text('Silakan masukkan token atau cookie.')),
       );
       return;
     }
@@ -85,34 +77,28 @@ class _LoginScreenState extends State<LoginScreen>
     final authProvider = context.read<AuthProvider>();
     bool success;
 
-    if (_isCookieMode) {
-      success =
-          await authProvider.loginWithSupabaseCookie(_inputCtrl.text.trim());
+    if (ClipboardHelper.isSupabaseCookie(text)) {
+      success = await authProvider.loginWithSupabaseCookie(text);
     } else {
-      success = await authProvider.loginWithToken(_inputCtrl.text.trim());
+      success = await authProvider.loginWithToken(text);
     }
 
     if (success && mounted) {
       if (authProvider.token != null) {
-        context
-            .read<BookmarkProvider>()
-            .syncRemoteBookmarks(authProvider.token!);
+        context.read<BookmarkProvider>().syncRemoteBookmarks(authProvider.token!);
         context.read<HistoryProvider>().syncRemoteHistory(authProvider.token!);
       }
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(
-              '✅ Selamat datang, ${authProvider.user?.username ?? "Pembaca"}! Sesi aktif ~60 hari.'),
+          content: Text('✅ Selamat datang, ${authProvider.user?.username ?? "Pembaca"}! Akun terhubung.'),
           backgroundColor: AppColors.emerald,
-          duration: const Duration(seconds: 3),
         ),
       );
       Navigator.pop(context);
     } else if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content:
-              Text(authProvider.errorMessage ?? 'Gagal menghubungkan akun.'),
+          content: Text(authProvider.errorMessage ?? 'Gagal menghubungkan akun.'),
           backgroundColor: Colors.red,
         ),
       );
@@ -125,19 +111,18 @@ class _LoginScreenState extends State<LoginScreen>
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Hubungkan Akun',
-            style: TextStyle(fontWeight: FontWeight.w800, fontSize: 18)),
+        title: const Text('Hubungkan Akun', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 18)),
       ),
       body: ListView(
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
         children: [
-          // Header
+          // Logo & Header
           Center(
             child: Column(
               children: [
                 Container(
-                  width: 72,
-                  height: 72,
+                  width: 68,
+                  height: 68,
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(20),
                     image: const DecorationImage(
@@ -146,7 +131,7 @@ class _LoginScreenState extends State<LoginScreen>
                     ),
                     boxShadow: [
                       BoxShadow(
-                        color: AppColors.primary.withValues(alpha: 0.3),
+                        color: AppColors.primary.withValues(alpha: 0.35),
                         blurRadius: 20,
                         offset: const Offset(0, 8),
                       ),
@@ -156,426 +141,210 @@ class _LoginScreenState extends State<LoginScreen>
                 const SizedBox(height: 14),
                 const Text(
                   'Masuk Akun Shinigami',
-                  style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w900,
-                      color: Colors.white),
+                  style: TextStyle(fontSize: 19, fontWeight: FontWeight.w900, color: Colors.white),
                 ),
                 const SizedBox(height: 6),
                 const Text(
-                  'Sinkronkan bookmark & riwayat baca dengan akun resmimu.',
+                  'Sinkronkan bookmark komik & riwayat baca secara otomatis.',
                   textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 12, color: AppColors.textMuted),
+                  style: TextStyle(fontSize: 12.5, color: AppColors.textMuted),
                 ),
               ],
             ),
           ),
-          const SizedBox(height: 22),
+          const SizedBox(height: 24),
 
-          // Tab Selector
+          // PRIMARY CARD: In-App WebView Auto-Login
           Container(
+            padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
-              color: AppColors.surface,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: AppColors.border),
-            ),
-            child: TabBar(
-              controller: _tabController,
-              indicator: BoxDecoration(
-                color: AppColors.primary.withValues(alpha: 0.25),
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(
-                    color: AppColors.primary.withValues(alpha: 0.6), width: 1),
-              ),
-              indicatorSize: TabBarIndicatorSize.tab,
-              dividerColor: Colors.transparent,
-              labelColor: AppColors.primaryLight,
-              unselectedLabelColor: AppColors.textMuted,
-              labelStyle:
-                  const TextStyle(fontWeight: FontWeight.w800, fontSize: 12.5),
-              tabs: const [
-                Tab(
-                  icon: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.cookie_outlined, size: 15),
-                      SizedBox(width: 5),
-                      Text('Cookie (Rekomendasi)'),
-                    ],
-                  ),
-                ),
-                Tab(
-                  icon: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.key_outlined, size: 15),
-                      SizedBox(width: 5),
-                      Text('Bearer Token'),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 14),
-
-          // Duration badge
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            decoration: BoxDecoration(
-              color: _isCookieMode
-                  ? AppColors.emerald.withValues(alpha: 0.12)
-                  : Colors.orange.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(
-                color: _isCookieMode
-                    ? AppColors.emerald.withValues(alpha: 0.35)
-                    : Colors.orange.withValues(alpha: 0.35),
-              ),
-            ),
-            child: Row(
-              children: [
-                Icon(
-                  _isCookieMode
-                      ? Icons.verified_rounded
-                      : Icons.warning_amber_rounded,
-                  size: 16,
-                  color: _isCookieMode ? AppColors.emerald : Colors.orange,
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    _isCookieMode
-                        ? '✅ Login via Cookie: Sesi aktif ±60 hari — tidak perlu login ulang!'
-                        : '⚠️ Bearer Token hanya berlaku ±1 jam sebelum kedaluwarsa.',
-                    style: TextStyle(
-                      fontSize: 11.5,
-                      fontWeight: FontWeight.w600,
-                      color: _isCookieMode ? AppColors.emerald : Colors.orange,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 14),
-
-          // Auto-detected badge
-          if (_autoDetected) ...[
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              decoration: BoxDecoration(
-                color: AppColors.emerald.withValues(alpha: 0.15),
-                borderRadius: BorderRadius.circular(10),
-                border:
-                    Border.all(color: AppColors.emerald.withValues(alpha: 0.35)),
-              ),
-              child: Row(
-                children: [
-                  const Icon(Icons.check_circle_rounded,
-                      color: AppColors.emerald, size: 16),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      _isCookieMode
-                          ? '🍪 Cookie Shinigami terdeteksi otomatis dari Clipboard!'
-                          : '✨ Token Shinigami terdeteksi otomatis dari Clipboard!',
-                      style: const TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.emerald),
-                    ),
-                  ),
+              gradient: LinearGradient(
+                colors: [
+                  AppColors.primary.withValues(alpha: 0.25),
+                  const Color(0xFF131B2E),
                 ],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
               ),
-            ),
-            const SizedBox(height: 12),
-          ],
-
-          // Input Box
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: AppColors.card,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: AppColors.border),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: AppColors.primary.withValues(alpha: 0.5), width: 1.5),
+              boxShadow: [
+                BoxShadow(
+                  color: AppColors.primary.withValues(alpha: 0.15),
+                  blurRadius: 24,
+                  offset: const Offset(0, 8),
+                ),
+              ],
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text(
-                      _isCookieMode ? 'Cookie Sesi Supabase' : 'Bearer Token',
-                      style: const TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.textSecondary),
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: AppColors.primary.withValues(alpha: 0.3),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: const Icon(Icons.auto_awesome, color: AppColors.cyan, size: 22),
                     ),
-                    TextButton.icon(
-                      onPressed: _pasteFromClipboard,
-                      icon: const Icon(Icons.paste_rounded,
-                          size: 14, color: AppColors.primaryLight),
-                      label: const Text('Tempel',
-                          style: TextStyle(
-                              fontSize: 11.5,
-                              fontWeight: FontWeight.w700,
-                              color: AppColors.primaryLight)),
+                    const SizedBox(width: 12),
+                    const Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Login Otomatis via Web',
+                            style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: Colors.white),
+                          ),
+                          SizedBox(height: 2),
+                          Text(
+                            'Paling Mudah • Anti Ribet',
+                            style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: AppColors.cyan),
+                          ),
+                        ],
+                      ),
                     ),
                   ],
                 ),
-                const SizedBox(height: 6),
-                TextField(
-                  controller: _inputCtrl,
-                  maxLines: 3,
-                  style: const TextStyle(
-                      fontSize: 11, fontFamily: 'monospace', color: Colors.white),
-                  onChanged: (_) => setState(() => _autoDetected = false),
-                  decoration: InputDecoration(
-                    hintText: _isCookieMode
-                        ? 'Tempel cookie di sini\n(sb-kratos-auth-token.0=base64-eyJ...)'
-                        : 'Tempel token di sini (v4.public...)',
-                    hintStyle: const TextStyle(
-                        fontSize: 11, color: AppColors.textDisabled),
-                    filled: true,
-                    fillColor: AppColors.surface,
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
-                      borderSide: const BorderSide(color: AppColors.border),
-                    ),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
-                      borderSide: const BorderSide(color: AppColors.border),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
-                      borderSide: const BorderSide(color: AppColors.primary),
-                    ),
-                    contentPadding: const EdgeInsets.all(12),
-                  ),
-                ),
                 const SizedBox(height: 14),
+                const Text(
+                  'Buka halaman web Shinigami langsung di dalam aplikasi. Begitu kamu login dengan Google atau Email, sesi & token akan otomatis tersimpan!',
+                  style: TextStyle(fontSize: 12.5, color: AppColors.textSecondary, height: 1.45),
+                ),
+                const SizedBox(height: 18),
                 SizedBox(
                   width: double.infinity,
-                  height: 46,
-                  child: ElevatedButton(
-                    onPressed: authProvider.isLoading ? null : _submitLogin,
+                  height: 48,
+                  child: ElevatedButton.icon(
+                    onPressed: _openWebViewLogin,
+                    icon: const Icon(Icons.open_in_browser_rounded, size: 18, color: Colors.white),
+                    label: const Text(
+                      'Buka Web & Login Otomatis',
+                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: Colors.white),
+                    ),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppColors.primary,
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12)),
+                      elevation: 4,
+                      shadowColor: AppColors.primary.withValues(alpha: 0.5),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                     ),
-                    child: authProvider.isLoading
-                        ? const SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(
-                                strokeWidth: 2, color: Colors.white))
-                        : Text(
-                            _autoDetected
-                                ? (_isCookieMode
-                                    ? '🍪 Cookie Terdeteksi! Login Sekarang'
-                                    : '✨ Token Terdeteksi! Hubungkan Sekarang')
-                                : (_isCookieMode
-                                    ? 'Login via Cookie (±60 Hari)'
-                                    : 'Hubungkan Bearer Token'),
-                            style: const TextStyle(
-                                fontSize: 13.5,
-                                fontWeight: FontWeight.w800,
-                                color: Colors.white),
-                          ),
                   ),
                 ),
               ],
             ),
           ),
-          const SizedBox(height: 18),
+          const SizedBox(height: 20),
 
-          // Tutorial
+          // Collapsible Manual Input Accordion
           Container(
-            padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
               color: AppColors.card,
               borderRadius: BorderRadius.circular(16),
               border: Border.all(color: AppColors.border),
             ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Icon(
-                      _isCookieMode
-                          ? Icons.cookie_outlined
-                          : Icons.help_outline_rounded,
-                      color: _isCookieMode ? AppColors.emerald : AppColors.cyan,
-                      size: 18,
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      _isCookieMode
-                          ? 'Cara Ambil Cookie (Sekali, Valid ~60 Hari)'
-                          : 'Cara Ambil Bearer Token',
-                      style: const TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w800,
-                          color: Colors.white),
+            child: Theme(
+              data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+              child: ExpansionTile(
+                initiallyExpanded: _isManualExpanded,
+                onExpansionChanged: (expanded) => setState(() => _isManualExpanded = expanded),
+                leading: const Icon(Icons.code_rounded, color: AppColors.textMuted, size: 20),
+                title: const Text(
+                  'Atau Tempel Token Manual',
+                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: AppColors.textSecondary),
+                ),
+                childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                children: [
+                  if (_autoDetected) ...[
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      margin: const EdgeInsets.only(bottom: 10),
+                      decoration: BoxDecoration(
+                        color: AppColors.emerald.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: AppColors.emerald.withValues(alpha: 0.3)),
+                      ),
+                      child: const Row(
+                        children: [
+                          Icon(Icons.check_circle_rounded, color: AppColors.emerald, size: 14),
+                          SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              'Token terdeteksi dari clipboard!',
+                              style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: AppColors.emerald),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ],
-                ),
-                const SizedBox(height: 14),
-                if (_isCookieMode) ...[
-                  // Cara termudah: Console
-                  Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: AppColors.primary.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(
-                          color: AppColors.primary.withValues(alpha: 0.3)),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text('⚡ Cara Paling Mudah (Console)',
-                            style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w800,
-                                color: AppColors.primaryLight)),
-                        const SizedBox(height: 6),
-                        _buildStep('1',
-                            'Buka 11.shinigami.asia & Login → tekan F12'),
-                        _buildStep(
-                            '2', 'Klik tab Console → ketik perintah ini:'),
-                        Container(
-                          padding: const EdgeInsets.all(8),
-                          decoration: BoxDecoration(
-                            color: Colors.black,
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                          child: const SelectableText(
-                            'copy(document.cookie)',
-                            style: TextStyle(
-                                fontSize: 12,
-                                fontFamily: 'monospace',
-                                color: AppColors.emerald),
-                          ),
-                        ),
-                        const SizedBox(height: 6),
-                        _buildStep('3',
-                            'Tekan Enter → Cookie otomatis tersalin ke clipboard!'),
-                        _buildStep('4',
-                            'Kembali ke app → Tempel → aplikasi detect otomatis → Login!'),
-                      ],
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        'Token Otorisasi (Bearer v4.public...)',
+                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textMuted),
+                      ),
+                      TextButton.icon(
+                        onPressed: _pasteFromClipboard,
+                        icon: const Icon(Icons.paste_rounded, size: 13, color: AppColors.primaryLight),
+                        label: const Text('Tempel', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700)),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  TextField(
+                    controller: _inputCtrl,
+                    maxLines: 2,
+                    style: const TextStyle(fontSize: 11, fontFamily: 'monospace', color: Colors.white),
+                    decoration: InputDecoration(
+                      hintText: 'Tempel token di sini (v4.public...)',
+                      hintStyle: const TextStyle(fontSize: 11, color: AppColors.textDisabled),
+                      filled: true,
+                      fillColor: AppColors.surface,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: const BorderSide(color: AppColors.border),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: const BorderSide(color: AppColors.border),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: const BorderSide(color: AppColors.primary),
+                      ),
+                      contentPadding: const EdgeInsets.all(12),
                     ),
                   ),
-                  const SizedBox(height: 10),
-                  // Alternatif: Application tab
-                  Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: Colors.black.withValues(alpha: 0.2),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: AppColors.border),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text('📋 Cara Alternatif (Application Tab)',
-                            style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w700,
-                                color: AppColors.textSecondary)),
-                        const SizedBox(height: 6),
-                        _buildStep(
-                            '1', 'F12 → tab Application → Cookies → pilih URL'),
-                        _buildStep('2',
-                            'Cari sb-kratos-auth-token.0 (HARUS yang .0, bukan .1!)'),
-                        _buildStep('3',
-                            'Klik 2× Value → Ctrl+A → Ctrl+C → Tempel ke aplikasi'),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: AppColors.emerald.withValues(alpha: 0.08),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(
-                          color: AppColors.emerald.withValues(alpha: 0.25)),
-                    ),
-                    child: const Text(
-                      '✅ Cookie berlaku ±60 hari — jauh lebih lama dari Bearer Token (1 jam)!\n⚠️ Jangan salin bagian .1 saja — harus .0 atau full document.cookie!',
-                      style: TextStyle(
-                          fontSize: 11.5, color: AppColors.emerald, height: 1.4),
-                    ),
-                  ),
-                ] else ...[
-                  _buildStep(
-                      '1', 'Buka 11.shinigami.asia & pastikan sudah login.'),
-                  _buildStep('2', 'Tekan F12 → Tab Network.'),
-                  _buildStep('3', 'Buka halaman Bookmark di web.'),
-                  _buildStep(
-                      '4', 'Klik request list?page=1... → Tab Headers.'),
-                  _buildStep('5',
-                      'Salin teks authorization: Bearer v4.public...'),
-                  const SizedBox(height: 6),
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: Colors.orange.withValues(alpha: 0.08),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(
-                          color: Colors.orange.withValues(alpha: 0.25)),
-                    ),
-                    child: const Text(
-                      '⚠️ Bearer Token hanya berlaku ±1 jam. Gunakan mode Cookie di tab sebelumnya untuk sesi yang jauh lebih lama!',
-                      style: TextStyle(
-                          fontSize: 11.5, color: Colors.orange, height: 1.4),
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 42,
+                    child: OutlinedButton(
+                      onPressed: authProvider.isLoading ? null : _submitManualLogin,
+                      style: OutlinedButton.styleFrom(
+                        side: const BorderSide(color: AppColors.primary),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      ),
+                      child: authProvider.isLoading
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                            )
+                          : const Text(
+                              'Hubungkan Token Manual',
+                              style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: AppColors.primaryLight),
+                            ),
                     ),
                   ),
                 ],
-              ],
+              ),
             ),
           ),
           const SizedBox(height: 32),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildStep(String num, String text) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: 22,
-            height: 22,
-            decoration: BoxDecoration(
-              color: AppColors.primary.withValues(alpha: 0.2),
-              shape: BoxShape.circle,
-              border: Border.all(
-                  color: AppColors.primary.withValues(alpha: 0.5), width: 1),
-            ),
-            alignment: Alignment.center,
-            child: Text(num,
-                style: const TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w900,
-                    color: AppColors.primaryLight)),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(text,
-                style: const TextStyle(
-                    fontSize: 12.5,
-                    color: AppColors.textSecondary,
-                    height: 1.45)),
-          ),
         ],
       ),
     );

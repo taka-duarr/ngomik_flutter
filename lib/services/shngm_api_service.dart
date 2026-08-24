@@ -198,7 +198,9 @@ class ShngmApiService {
 
   Future<User?> fetchUserProfile(String tokenOrUserId) async {
     try {
-      final isToken = tokenOrUserId.startsWith('v4.public.') || tokenOrUserId.startsWith('Bearer ');
+      final isToken = tokenOrUserId.startsWith('v4.public.') ||
+          tokenOrUserId.startsWith('Bearer ') ||
+          tokenOrUserId.startsWith('eyJ'); // Supabase JWT
       if (isToken) {
         final uri = Uri.parse(ApiEndpoints.userDetail);
         final response = await _client.get(uri, headers: ApiEndpoints.defaultHeaders(token: tokenOrUserId));

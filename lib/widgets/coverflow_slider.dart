@@ -6,6 +6,8 @@ import '../screens/detail/manga_detail_screen.dart';
 import 'manga_flag.dart';
 import 'app_network_image.dart';
 
+import 'bouncing_tap.dart';
+
 class CoverflowSlider extends StatefulWidget {
   final List<Manga> mangaList;
 
@@ -48,7 +50,8 @@ class _CoverflowSliderState extends State<CoverflowSlider> {
   Widget _buildCard(BuildContext context, Manga manga, bool isCenter) {
     final genre = manga.genres.isNotEmpty ? manga.genres.first : 'Comic';
 
-    return GestureDetector(
+    return BouncingTap(
+      scaleFactor: 0.96,
       onTap: () {
         Navigator.push(
           context,

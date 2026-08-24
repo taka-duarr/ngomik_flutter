@@ -61,11 +61,7 @@ class AuthProvider with ChangeNotifier {
       if (session == null) {
         _errorMessage =
             'Cookie tidak lengkap atau terpotong.\n\n'
-            'Gunakan cara ini:\n'
-            '1. Buka Console (F12) di browser\n'
-            '2. Ketik: copy(document.cookie)\n'
-            '3. Tekan Enter → Tempel ke aplikasi\n\n'
-            'Jangan salin dari Application tab karena nilainya bisa terpotong!';
+            'Gunakan: F12 → Console → ketik copy(document.cookie) → Enter';
         _isLoading = false;
         notifyListeners();
         return false;
@@ -82,34 +78,54 @@ class AuthProvider with ChangeNotifier {
         return false;
       }
 
-      // Verify the access token with the API
-      final profile = await _apiService.fetchUserProfile(accessToken);
-      if (profile != null) {
-        _user = profile.copyWith(token: accessToken);
-        _token = accessToken;
-        _refreshToken = refreshTok;
-        _tokenExpiresAt = expiresAt is int
-            ? expiresAt
-            : int.tryParse(expiresAt?.toString() ?? '');
+      // Build User from JWT/session payload — no API call needed
+      // Shinigami API uses Paseto tokens, not Supabase JWT
+      final userJson = session['user'] as Map<String, dynamic>?;
+      final userMeta = userJson?['user_metadata'] as Map<String, dynamic>?;
 
-        await _storageService.saveToken(accessToken);
-        await _storageService.saveUser(_user!);
-        if (_refreshToken != null) {
-          await _storageService.saveRefreshToken(_refreshToken!);
-        }
-        if (_tokenExpiresAt != null) {
-          await _storageService.saveTokenExpiresAt(_tokenExpiresAt!);
-        }
+      final userId = userJson?['id']?.toString() ?? '';
+      final email = userJson?['email']?.toString() ??
+          userMeta?['email']?.toString() ?? '';
+      final fullName = userMeta?['full_name']?.toString() ??
+          userMeta?['name']?.toString() ??
+          email.split('@').first;
+      final avatarUrl = userMeta?['avatar_url']?.toString() ??
+          userMeta?['picture']?.toString();
+      final createdAt = userJson?['created_at']?.toString();
 
-        _isLoading = false;
-        notifyListeners();
-        return true;
-      } else {
-        _errorMessage = 'Cookie tidak valid atau sudah kedaluwarsa. Silakan salin cookie baru.';
+      if (userId.isEmpty) {
+        _errorMessage = 'Data user tidak ditemukan dalam cookie. Coba copy ulang.';
         _isLoading = false;
         notifyListeners();
         return false;
       }
+
+      _user = User(
+        userId: userId,
+        username: fullName.isNotEmpty ? fullName : 'Pembaca',
+        email: email,
+        avatarImageUrl: avatarUrl,
+        token: accessToken,
+        registrationDate: createdAt,
+      );
+      _token = accessToken;
+      _refreshToken = refreshTok;
+      _tokenExpiresAt = expiresAt is int
+          ? expiresAt
+          : int.tryParse(expiresAt?.toString() ?? '');
+
+      await _storageService.saveToken(accessToken);
+      await _storageService.saveUser(_user!);
+      if (_refreshToken != null) {
+        await _storageService.saveRefreshToken(_refreshToken!);
+      }
+      if (_tokenExpiresAt != null) {
+        await _storageService.saveTokenExpiresAt(_tokenExpiresAt!);
+      }
+
+      _isLoading = false;
+      notifyListeners();
+      return true;
     } catch (e) {
       debugPrint('loginWithSupabaseCookie error: $e');
       _errorMessage = 'Gagal memproses cookie: $e';

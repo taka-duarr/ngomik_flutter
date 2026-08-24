@@ -12,6 +12,7 @@ import '../../providers/auth_provider.dart';
 import '../../widgets/google_dots_loading.dart';
 import '../../widgets/comments_section.dart';
 import '../../widgets/liquid_glass_container.dart';
+import '../../widgets/bouncing_tap.dart';
 
 class ReaderScreen extends StatefulWidget {
   final String chapterId;
@@ -107,6 +108,26 @@ class _ReaderScreenState extends State<ReaderScreen> {
     setState(() {
       _showControls = !_showControls;
     });
+  }
+
+  void _scrollToTop() {
+    if (_scrollController.hasClients) {
+      _scrollController.animateTo(
+        0,
+        duration: const Duration(milliseconds: 550),
+        curve: Curves.easeOutCubic,
+      );
+    }
+  }
+
+  void _scrollToBottom() {
+    if (_scrollController.hasClients) {
+      _scrollController.animateTo(
+        _scrollController.position.maxScrollExtent,
+        duration: const Duration(milliseconds: 650),
+        curve: Curves.easeOutCubic,
+      );
+    }
   }
 
   void _hideControls() {
@@ -460,6 +481,80 @@ class _ReaderScreenState extends State<ReaderScreen> {
                     onPressed: _chapterDetail?.nextChapterId != null
                         ? () => _loadChapterImages(_chapterDetail!.nextChapterId!)
                         : null,
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          // 5. Floating Quick Scroll Dock (Jump to Top & Jump to Bottom)
+          AnimatedPositioned(
+            duration: const Duration(milliseconds: 280),
+            curve: Curves.easeInOutCubic,
+            right: 14,
+            bottom: _showControls ? (bottomPadding + 78) : -(bottomPadding + 140),
+            child: LiquidGlassContainer(
+              borderRadius: 20,
+              padding: const EdgeInsets.all(5),
+              color: Colors.black.withValues(alpha: 0.60),
+              border: Border.all(
+                color: Colors.white.withValues(alpha: 0.20),
+                width: 1.0,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.55),
+                  blurRadius: 16,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Jump to Top Button
+                  Tooltip(
+                    message: 'Ke Paling Atas',
+                    child: BouncingTap(
+                      scaleFactor: 0.88,
+                      onTap: _scrollToTop,
+                      child: Container(
+                        width: 38,
+                        height: 38,
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.10),
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(color: Colors.white.withValues(alpha: 0.16)),
+                        ),
+                        child: const Icon(
+                          Icons.keyboard_double_arrow_up_rounded,
+                          color: Colors.white,
+                          size: 22,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  // Jump to Bottom Button
+                  Tooltip(
+                    message: 'Ke Paling Bawah',
+                    child: BouncingTap(
+                      scaleFactor: 0.88,
+                      onTap: _scrollToBottom,
+                      child: Container(
+                        width: 38,
+                        height: 38,
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.10),
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(color: Colors.white.withValues(alpha: 0.16)),
+                        ),
+                        child: const Icon(
+                          Icons.keyboard_double_arrow_down_rounded,
+                          color: Colors.white,
+                          size: 22,
+                        ),
+                      ),
+                    ),
                   ),
                 ],
               ),

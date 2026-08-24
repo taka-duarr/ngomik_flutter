@@ -31,35 +31,34 @@ class ClipboardHelper {
 
   // --- Supabase Cookie (lasts ~60 days) ---
 
-  /// Detects if text is a Supabase session cookie or document.cookie output
   static bool isSupabaseCookie(String? text) {
     if (text == null) return false;
     final trimmed = text.trim();
     return trimmed.contains('sb-kratos-auth-token') ||
-        (trimmed.startsWith('base64-eyJ') || trimmed.startsWith('eyJ'));
+        trimmed.startsWith('base64-eyJ') ||
+        trimmed.startsWith('eyJ');
   }
 
-  /// Parse a Supabase session from various possible formats:
-  /// 1. Full document.cookie string (contains sb-kratos-auth-token.0 AND .1)
-  /// 2. Just the .0 cookie value: "base64-eyJ..."
-  /// 3. Cookie header line: "sb-kratos-auth-token.0=base64-eyJ..."
+  /// Parse Supabase session from:
+  /// 1. Full document.cookie string (.0 + .1 combined)
+  /// 2. Just the .0 value: "base64-eyJ..."
+  /// 3. Raw base64 starting with "eyJ"
   static Map<String, dynamic>? parseSupabaseCookie(String input) {
     try {
       final trimmed = input.trim();
 
-      // Strategy 1: Full document.cookie string — extract .0 AND .1, combine
+      // Strategy 1: full document.cookie string
       if (trimmed.contains('sb-kratos-auth-token')) {
-        final combined = _extractAndCombineCookieParts(trimmed);
-        if (combined != null) return combined;
+        final result = _extractAndCombineCookieParts(trimmed);
+        if (result != null) return result;
       }
 
-      // Strategy 2: Just the raw value of .0 starting with "base64-"
+      // Strategy 2: just "base64-eyJ..." value
       if (trimmed.startsWith('base64-')) {
-        final b64 = trimmed.substring(7);
-        return _decodeBase64Json(b64);
+        return _decodeBase64Json(trimmed.substring(7));
       }
 
-      // Strategy 3: Raw base64 starting with "eyJ" (value without prefix)
+      // Strategy 3: raw base64
       if (trimmed.startsWith('eyJ')) {
         return _decodeBase64Json(trimmed);
       }
@@ -70,12 +69,10 @@ class ClipboardHelper {
     }
   }
 
-  /// Extract, combine .0 + .1 parts, and decode
-  static Map<String, dynamic>? _extractAndCombineCookieParts(String cookieStr) {
+  static Map<String, dynamic>? _extractAndCombineCookieParts(
+      String cookieStr) {
     try {
-      // Split by "; " or ";" to get individual cookie parts
       final parts = cookieStr.split(RegExp(r';\s*'));
-
       String? part0;
       String? part1;
 
@@ -85,54 +82,75 @@ class ClipboardHelper {
         final key = part.substring(0, eqIdx).trim();
         final value = part.substring(eqIdx + 1).trim();
 
-        if (key.endsWith('.0') && key.contains('sb-') && key.contains('auth-token')) {
-          part0 = value;
-        } else if (key.endsWith('.1') && key.contains('sb-') && key.contains('auth-token')) {
-          part1 = value;
+        if (key.contains('auth-token') && key.endsWith('.0')) {
+          part0 = value.startsWith('base64-') ? value.substring(7) : value;
+        } else if (key.contains('auth-token') && key.endsWith('.1')) {
+          part1 = value.startsWith('base64-') ? value.substring(7) : value;
         }
       }
 
       if (part0 == null) return null;
 
-      // .0 value: "base64-eyJ..."
-      String base64Part0 = part0.startsWith('base64-')
-          ? part0.substring(7)
-          : part0;
-
-      // .1 value: might just be raw continuation base64 (no "base64-" prefix)
-      String? base64Part1 = part1 != null
-          ? (part1.startsWith('base64-') ? part1.substring(7) : part1)
-          : null;
-
-      // Combine the two base64 chunks
-      final combined = base64Part0 + (base64Part1 ?? '');
+      // Combine .0 + .1 then decode
+      final combined = part0 + (part1 ?? '');
       return _decodeBase64Json(combined);
     } catch (_) {
       return null;
     }
   }
 
-  static Map<String, dynamic>? _decodeBase64Json(String b64) {
-    try {
-      final padded = _fixBase64Padding(b64);
-      final decoded = utf8.decode(base64Decode(padded));
-      final json = jsonDecode(decoded) as Map<String, dynamic>;
+  static Map<String, dynamic>? _decodeBase64Json(String b64Raw) {
+    // Try multiple decode strategies
+    final strategies = [
+      () => _tryDecode(b64Raw), // as-is
+      () => _tryDecode(b64Raw.replaceAll('-', '+').replaceAll('_', '/')), // url-safe → standard
+      () => _tryDecode(b64Raw.replaceAll('+', '-').replaceAll('/', '_')), // standard → url-safe
+    ];
 
-      if (!json.containsKey('access_token') ||
-          !json.containsKey('refresh_token')) {
-        return null;
+    for (final strategy in strategies) {
+      try {
+        final result = strategy();
+        if (result != null) return result;
+      } catch (_) {}
+    }
+    return null;
+  }
+
+  static Map<String, dynamic>? _tryDecode(String b64) {
+    try {
+      // Use base64 (standard) with manual padding
+      final padded = _addPadding(b64.replaceAll('-', '+').replaceAll('_', '/'));
+      final bytes = base64.decode(padded);
+      final decoded = utf8.decode(bytes);
+      final json = jsonDecode(decoded) as Map<String, dynamic>;
+      if (json.containsKey('access_token') &&
+          json.containsKey('refresh_token')) {
+        return json;
       }
-      return json;
+      return null;
     } catch (_) {
+      // Try base64Url codec
+      try {
+        final normalized = base64Url.normalize(b64);
+        final bytes = base64Url.decode(normalized);
+        final decoded = utf8.decode(bytes);
+        final json = jsonDecode(decoded) as Map<String, dynamic>;
+        if (json.containsKey('access_token') &&
+            json.containsKey('refresh_token')) {
+          return json;
+        }
+      } catch (_) {}
       return null;
     }
   }
 
-  static String _fixBase64Padding(String s) {
-    // Standard base64 (not URL-safe)
-    final cleaned = s.replaceAll('-', '+').replaceAll('_', '/');
-    final remainder = cleaned.length % 4;
-    if (remainder == 0) return cleaned;
-    return cleaned + ('=' * (4 - remainder));
+  static String _addPadding(String s) {
+    final remainder = s.length % 4;
+    if (remainder == 0) return s;
+    if (remainder == 1) {
+      // Invalid - try adding 3 anyway
+      return '$s===';
+    }
+    return s + ('=' * (4 - remainder));
   }
 }

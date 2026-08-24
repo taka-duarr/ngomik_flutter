@@ -333,12 +333,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
               child: Column(
                 children: [
                   Container(
-                    padding: const EdgeInsets.all(12),
+                    width: 58,
+                    height: 58,
                     decoration: BoxDecoration(
-                      color: AppColors.primary.withValues(alpha: 0.15),
-                      shape: BoxShape.circle,
+                      borderRadius: BorderRadius.circular(16),
+                      image: const DecorationImage(
+                        image: AssetImage('assets/images/logo.png'),
+                        fit: BoxFit.cover,
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: AppColors.primary.withValues(alpha: 0.35),
+                          blurRadius: 14,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
                     ),
-                    child: const Icon(Icons.account_circle_outlined, size: 44, color: AppColors.primary),
                   ),
                   const SizedBox(height: 12),
                   const Text(
@@ -376,7 +386,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             const SizedBox(height: 14),
           ],
 
-          // 2. Tutorial Section Card
+          // 2. Tutorial Section Card (Updated for WebView Auto-Login)
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
@@ -385,6 +395,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   AppColors.cyan.withValues(alpha: 0.08),
                   AppColors.card,
                 ],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
               ),
               borderRadius: BorderRadius.circular(18),
               border: Border.all(color: AppColors.cyan.withValues(alpha: 0.3)),
@@ -394,10 +406,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
               children: [
                 const Row(
                   children: [
-                    Icon(Icons.menu_book_rounded, color: AppColors.cyan, size: 18),
+                    Icon(Icons.auto_awesome, color: AppColors.cyan, size: 18),
                     SizedBox(width: 8),
                     Text(
-                      'Panduan Ambil Token Web',
+                      'Panduan Login & Sinkronisasi Akun',
                       style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: Colors.white),
                     ),
                   ],
@@ -428,10 +440,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             child: const Row(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                Icon(Icons.laptop_chromebook_rounded, size: 15, color: AppColors.cyan),
+                                Icon(Icons.touch_app_rounded, size: 15, color: AppColors.cyan),
                                 SizedBox(width: 6),
                                 Text(
-                                  'Laptop / PC',
+                                  'Cara Otomatis (Mudah)',
                                   style: TextStyle(
                                     fontSize: 12,
                                     fontWeight: FontWeight.w700,
@@ -458,10 +470,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             child: const Row(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                Icon(Icons.smartphone_rounded, size: 15, color: AppColors.primaryLight),
+                                Icon(Icons.shield_outlined, size: 15, color: AppColors.primaryLight),
                                 SizedBox(width: 6),
                                 Text(
-                                  'HP Android',
+                                  'Info Sesi & Keamanan',
                                   style: TextStyle(
                                     fontSize: 12,
                                     fontWeight: FontWeight.w700,
@@ -480,46 +492,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
                 // Content Steps
                 if (_guideTab == 'pc') ...[
-                  _buildStepItem('1', 'Buka 11.shinigami.asia di browser PC & login ke akun Google/Discord.'),
-                  _buildStepItem('2', 'Tekan tombol F12 pada keyboard (Inspect Element).'),
-                  _buildStepItem('3', 'Pilih tab Network ➜ Buka menu Bookmark di website.'),
-                  _buildStepItem('4', 'Klik request list?page=1... ➜ Lihat tab Headers di sebelah kanan.'),
-                  _buildStepItem('5', 'Di bagian Request Headers, salin seluruh isi authorization: Bearer v4.public...'),
+                  _buildStepItem('1', 'Klik tombol "Hubungkan Akun" di bagian atas halaman ini.'),
+                  _buildStepItem('2', 'Tekan tombol "Buka Web & Login Otomatis" di layar login.'),
+                  _buildStepItem('3', 'Halaman web resmi Shinigami akan muncul di aplikasi. Login dengan akun Google atau Email kamu.'),
+                  _buildStepItem('4', 'Setelah berhasil login, buka salah satu menu/komik di web tersebut atau tekan tombol "Hubungkan".'),
+                  _buildStepItem('5', 'Selesai! Token terdeteksi otomatis, semua bookmark & riwayat baca langsung tersinkronkan.'),
                 ] else ...[
-                  _buildStepItem('1', 'Buka web Shinigami di browser HP (Chrome / Brave / Kiwi) & login.'),
-                  _buildStepItem('2', 'Jalankan perintah berikut di console browser:'),
-                  const SizedBox(height: 6),
-                  Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: Colors.black,
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: AppColors.border),
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Expanded(
-                          child: Text(
-                            'copy(localStorage.token || document.cookie)',
-                            style: TextStyle(fontSize: 11, fontFamily: 'monospace', color: AppColors.cyan),
-                          ),
-                        ),
-                        IconButton(
-                          icon: const Icon(Icons.copy_rounded, size: 16, color: AppColors.cyan),
-                          onPressed: () {
-                            ClipboardHelper.copyText('copy(localStorage.token || document.cookie)');
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text('Kode console berhasil disalin!'),
-                                backgroundColor: AppColors.emerald,
-                              ),
-                            );
-                          },
-                        ),
-                      ],
-                    ),
-                  ),
+                  _buildStepItem('1', 'Sesi login di WebView tersimpan aman di perangkat (±60 hari), tidak perlu login ulang setiap saat.'),
+                  _buildStepItem('2', 'Full Online: Bookmark dan riwayat baca tersinkronisasi langsung 100% online dengan server Shinigami tanpa membebani memori HP.'),
+                  _buildStepItem('3', 'Jika token API kedaluwarsa, cukup buka kembali menu "Login Otomatis" untuk memperbarui token dalam 1 detik.'),
                 ],
               ],
             ),

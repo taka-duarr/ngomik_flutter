@@ -5,6 +5,8 @@ import 'manga_flag.dart';
 import 'app_network_image.dart';
 import '../screens/detail/manga_detail_screen.dart';
 
+import 'bouncing_tap.dart';
+
 class MangaCard extends StatelessWidget {
   final Manga manga;
   final VoidCallback? onTap;
@@ -19,7 +21,8 @@ class MangaCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final genre = manga.genres.isNotEmpty ? manga.genres.first : 'Action';
 
-    return GestureDetector(
+    return BouncingTap(
+      scaleFactor: 0.95,
       onTap: onTap ??
           () {
             Navigator.push(

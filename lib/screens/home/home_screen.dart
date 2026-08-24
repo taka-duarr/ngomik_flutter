@@ -8,6 +8,7 @@ import 'package:ngomik_flutter/widgets/coverflow_slider.dart';
 import 'package:ngomik_flutter/widgets/manga_card.dart';
 import 'package:ngomik_flutter/widgets/app_network_image.dart';
 import 'package:ngomik_flutter/widgets/google_dots_loading.dart';
+import 'package:ngomik_flutter/widgets/bouncing_tap.dart';
 import 'package:ngomik_flutter/screens/auth/login_screen.dart';
 import 'package:ngomik_flutter/screens/settings/settings_screen.dart';
 
@@ -93,7 +94,8 @@ class _HomeScreenState extends State<HomeScreen> {
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           // Left: Avatar + Greeting Text
-                          GestureDetector(
+                          BouncingTap(
+                            scaleFactor: 0.96,
                             onTap: () {
                               Navigator.push(
                                 context,
@@ -147,14 +149,11 @@ class _HomeScreenState extends State<HomeScreen> {
                                             ),
                                           ),
                                         )
-                                      : Center(
-                                          child: Text(
-                                            userInitials,
-                                            style: const TextStyle(
-                                              fontSize: 15,
-                                              fontWeight: FontWeight.w900,
-                                              color: Colors.white,
-                                            ),
+                                      : ClipRRect(
+                                          borderRadius: BorderRadius.circular(14),
+                                          child: Image.asset(
+                                            'assets/images/logo.png',
+                                            fit: BoxFit.cover,
                                           ),
                                         ),
                                 ),
@@ -188,7 +187,8 @@ class _HomeScreenState extends State<HomeScreen> {
                           ),
 
                           // Right: Action Button (Login [->] or Settings)
-                          GestureDetector(
+                          BouncingTap(
+                            scaleFactor: 0.92,
                             onTap: () {
                               Navigator.push(
                                 context,
@@ -498,7 +498,8 @@ class _HomeScreenState extends State<HomeScreen> {
   ) {
     final isSelected = provider.activeFilter == filterKey;
 
-    return GestureDetector(
+    return BouncingTap(
+      scaleFactor: 0.94,
       onTap: () => provider.setFilter(filterKey),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),

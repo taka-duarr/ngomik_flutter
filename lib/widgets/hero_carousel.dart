@@ -5,6 +5,8 @@ import '../models/manga.dart';
 import '../screens/detail/manga_detail_screen.dart';
 import 'app_network_image.dart';
 
+import 'bouncing_tap.dart';
+
 class HeroCarousel extends StatefulWidget {
   final List<Manga> mangaList;
 
@@ -66,9 +68,10 @@ class _HeroCarouselState extends State<HeroCarousel> {
 
   Widget _buildCarouselCard(BuildContext context, Manga manga, int index) {
     final image = manga.bannerUrl?.isNotEmpty == true ? manga.bannerUrl! : manga.coverUrl;
-    final genresText = manga.genres.isNotEmpty ? manga.genres.take(3).join(' � ') : 'Action � Adventure';
+    final genresText = manga.genres.isNotEmpty ? manga.genres.take(3).join(' • ') : 'Action • Adventure';
 
-    return GestureDetector(
+    return BouncingTap(
+      scaleFactor: 0.97,
       onTap: () {
         Navigator.push(
           context,
