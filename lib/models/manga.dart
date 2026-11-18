@@ -1,3 +1,5 @@
+import '../core/constants/api_endpoints.dart';
+
 class Manga {
   final String id;
   final String title;
@@ -55,10 +57,10 @@ class Manga {
         return 'https:$url';
       }
       if (url.startsWith('/')) {
-        return 'https://assets.shngm.id$url';
+        return '${ApiEndpoints.assetsBaseUrl}$url';
       }
       if (!url.startsWith('http://') && !url.startsWith('https://')) {
-        return 'https://assets.shngm.id/$url';
+        return '${ApiEndpoints.assetsBaseUrl}/$url';
       }
       return url;
     }
@@ -93,8 +95,8 @@ class Manga {
       'banner_image_url',
       'banner_url',
       'banner',
-      'cover_portrait_url',
       'cover_image_url',
+      'cover_portrait_url',
       'thumbnail_image_url',
       'cover_url',
       'cover',
@@ -141,6 +143,15 @@ class Manga {
         if (fmt is Map && fmt['name'] != null) {
           type = fmt['name'].toString();
         }
+      }
+    } else if (json['country_id'] != null) {
+      final country = json['country_id'].toString().toUpperCase();
+      if (country == 'KR') {
+        type = 'Manhwa';
+      } else if (country == 'CN') {
+        type = 'Manhua';
+      } else if (country == 'JP') {
+        type = 'Manga';
       }
     }
 

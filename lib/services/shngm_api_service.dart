@@ -7,6 +7,7 @@ import '../models/chapter.dart';
 import '../models/user.dart';
 import '../models/comment.dart';
 import '../models/reading_history.dart';
+import '../core/utils/clipboard_helper.dart';
 
 class ShngmApiService {
   final http.Client _client = http.Client();
@@ -71,6 +72,28 @@ class ShngmApiService {
 
   Future<List<Manga>> fetchPopularManga({int page = 1, int? pageSize}) async {
     return fetchMangaList(page: page, pageSize: pageSize, sort: 'bookmark');
+  }
+
+  Future<List<Manga>> fetchHomeHeroManga() async {
+    try {
+      final uri = Uri.parse(ApiEndpoints.recommendationHomeHero);
+      final response = await _client.get(uri, headers: ApiEndpoints.defaultHeaders());
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final list = data['data']?['mangas'] ?? data['data'] ?? [];
+        if (list is List) {
+          return list
+              .whereType<Map<String, dynamic>>()
+              .map((item) => Manga.fromJson(item))
+              .toList();
+        }
+      }
+      return [];
+    } catch (e) {
+      debugPrint('Error fetchHomeHeroManga: $e');
+      return [];
+    }
   }
 
   Future<List<Manga>> searchManga({
@@ -198,17 +221,20 @@ class ShngmApiService {
 
   Future<User?> fetchUserProfile(String tokenOrUserId) async {
     try {
-      final isToken = tokenOrUserId.startsWith('v4.public.') ||
-          tokenOrUserId.startsWith('Bearer ') ||
-          tokenOrUserId.startsWith('eyJ'); // Supabase JWT
+      final clean = ClipboardHelper.cleanToken(tokenOrUserId);
+      final isToken = clean.startsWith('v4.public.') ||
+          clean.startsWith('eyJ') ||
+          clean.length > 50 ||
+          tokenOrUserId.toLowerCase().startsWith('bearer ') ||
+          (clean.split('.').length == 3 && clean.length > 30);
       if (isToken) {
         final uri = Uri.parse(ApiEndpoints.userDetail);
-        final response = await _client.get(uri, headers: ApiEndpoints.defaultHeaders(token: tokenOrUserId));
+        final response = await _client.get(uri, headers: ApiEndpoints.defaultHeaders(token: clean));
 
         if (response.statusCode == 200) {
           final data = jsonDecode(response.body);
           final profile = data['data'] ?? data;
-          return User.fromJson(profile as Map<String, dynamic>, token: tokenOrUserId);
+          return User.fromJson(profile as Map<String, dynamic>, token: clean);
         }
       } else {
         final uri = Uri.parse(ApiEndpoints.userProfile(tokenOrUserId));
@@ -239,6 +265,7 @@ class ShngmApiService {
       final uri = Uri.parse(ApiEndpoints.bookmarkList).replace(queryParameters: queryParams);
       final response = await _client.get(uri, headers: ApiEndpoints.defaultHeaders(token: token));
 
+      if (response.statusCode != 200) debugPrint('fetchUserBookmarks: HTTP ${response.statusCode}');
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         final list = data['data'] ?? data['results'] ?? data['bookmarks'] ?? [];
@@ -285,21 +312,36 @@ class ShngmApiService {
 
   Future<List<ReadingHistoryItem>> fetchUserHistory(String token, {int page = 1, int pageSize = 50}) async {
     try {
+      final clean = ClipboardHelper.cleanToken(token);
       final queryParams = {
         'page': page.toString(),
         'page_size': pageSize.toString(),
-        'sort_by': 'updated_at',
+        'limit': pageSize.toString(),
+        'sort_by': 'last_read_chapter_time',
         'sort_order': 'desc',
       };
 
       final uri = Uri.parse(ApiEndpoints.historyList).replace(queryParameters: queryParams);
-      final response = await _client.get(uri, headers: ApiEndpoints.defaultHeaders(token: token));
+      final response = await _client.get(uri, headers: ApiEndpoints.defaultHeaders(token: clean));
 
+      if (response.statusCode != 200) debugPrint('fetchUserHistory: HTTP ${response.statusCode}');
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        final list = data['data'] ?? data['results'] ?? data['history'] ?? [];
+        final rawData = data['data'];
+        List? list;
+        if (rawData is List) {
+          list = rawData;
+        } else if (rawData is Map) {
+          list = rawData['data'] ?? rawData['history'] ?? rawData['list'] ?? rawData['results'];
+        } else {
+          list = data['results'] ?? data['history'];
+        }
+
         if (list is List) {
-          return list.map((item) => ReadingHistoryItem.fromJson(item as Map<String, dynamic>)).toList();
+          return list
+              .whereType<Map<String, dynamic>>()
+              .map((item) => ReadingHistoryItem.fromJson(item))
+              .toList();
         }
       }
       return [];
@@ -409,42 +451,103 @@ class ShngmApiService {
     int page = 1,
     int pageSize = 15,
     String sortBy = 'like_desc',
+    String? mangaId,
+    String? chapterId,
+    String? token,
   }) async {
     try {
-      final cleanPath = path.startsWith('/') ? path.substring(1) : path;
-      final queryParams = {
-        'path': cleanPath,
-        'page': page.toString(),
-        'pageSize': pageSize.toString(),
-        'lang': 'en',
-        'sortBy': sortBy,
-      };
-      final uri = Uri.parse(ApiEndpoints.walineComments).replace(queryParameters: queryParams);
-      final response = await _client.get(uri, headers: ApiEndpoints.defaultHeaders());
+      final pageKey = ApiEndpoints.normalizeCommentKey(
+        path,
+        mangaId: mangaId,
+        chapterId: chapterId,
+      );
+      final isArtalk = ApiEndpoints.commentsBaseUrl.contains('comment/api/v2');
+
+      final Uri uri;
+      if (isArtalk) {
+        uri = Uri.parse(ApiEndpoints.commentsList).replace(queryParameters: {
+          'page_key': pageKey,
+          'offset': ((page - 1) * pageSize).toString(),
+          'limit': pageSize.toString(),
+          'sort_by': sortBy == 'like_desc' ? 'vote' : 'date_desc',
+        });
+      } else {
+        uri = Uri.parse(ApiEndpoints.walineComments).replace(queryParameters: {
+          'path': pageKey,
+          'page': page.toString(),
+          'pageSize': pageSize.toString(),
+          'lang': 'en',
+          'sortBy': sortBy,
+        });
+      }
+
+      final response = await _client.get(
+        uri,
+        headers: ApiEndpoints.defaultHeaders(token: token),
+      );
 
       if (response.statusCode == 200) {
         final resJson = jsonDecode(response.body);
-        final dataObj = resJson['data'];
         List<WalineComment> comments = [];
         int count = 0;
         int totalPages = 1;
 
-        if (dataObj is Map) {
-          count = int.tryParse(dataObj['count']?.toString() ?? '0') ?? 0;
-          totalPages = int.tryParse(dataObj['totalPages']?.toString() ?? '1') ?? 1;
-          final list = dataObj['data'] ?? [];
+        if (isArtalk) {
+          final list = resJson['comments'] ?? [];
+          count = int.tryParse(resJson['count']?.toString() ?? '0') ?? 0;
+          totalPages = (count / pageSize).ceil();
+          if (totalPages < 1) totalPages = 1;
+
           if (list is List) {
-            comments = list
+            final allParsed = list
                 .whereType<Map<String, dynamic>>()
                 .map((c) => WalineComment.fromJson(c))
                 .toList();
+
+            // Group replies by rid (Artalk uses flat list with rid)
+            final Map<String, List<WalineComment>> replyMap = {};
+            final List<WalineComment> rootList = [];
+
+            for (final c in allParsed) {
+              if (c.rid > 0) {
+                final parentKey = c.rid.toString();
+                replyMap.putIfAbsent(parentKey, () => []).add(c);
+              } else {
+                rootList.add(c);
+              }
+            }
+
+            if (replyMap.isNotEmpty) {
+              comments = rootList.map((r) {
+                final rep = replyMap[r.id];
+                if (rep != null && rep.isNotEmpty) {
+                  return r.copyWith(replies: [...r.replies, ...rep]);
+                }
+                return r;
+              }).toList();
+            } else {
+              comments = rootList.isNotEmpty ? rootList : allParsed;
+            }
           }
-        } else if (dataObj is List) {
-          comments = dataObj
-              .whereType<Map<String, dynamic>>()
-              .map((c) => WalineComment.fromJson(c))
-              .toList();
-          count = comments.length;
+        } else {
+          final dataObj = resJson['data'];
+          if (dataObj is Map) {
+            count = int.tryParse(dataObj['count']?.toString() ?? '0') ?? 0;
+            totalPages = int.tryParse(dataObj['totalPages']?.toString() ?? '1') ?? 1;
+            final list = dataObj['data'] ?? [];
+            if (list is List) {
+              comments = list
+                  .whereType<Map<String, dynamic>>()
+                  .map((c) => WalineComment.fromJson(c))
+                  .toList();
+            }
+          } else if (dataObj is List) {
+            comments = dataObj
+                .whereType<Map<String, dynamic>>()
+                .map((c) => WalineComment.fromJson(c))
+                .toList();
+            count = comments.length;
+          }
         }
 
         return CommentPageResult(
@@ -461,28 +564,77 @@ class ShngmApiService {
     }
   }
 
+  Future<int> fetchCommentCount(
+    String path, {
+    String? mangaId,
+    String? chapterId,
+  }) async {
+    try {
+      final pageKey = ApiEndpoints.normalizeCommentKey(
+        path,
+        mangaId: mangaId,
+        chapterId: chapterId,
+      );
+      final uri = Uri.parse(ApiEndpoints.commentsStats).replace(queryParameters: {
+        'page_keys': pageKey,
+      });
+
+      final response = await _client.get(uri, headers: ApiEndpoints.defaultHeaders());
+      if (response.statusCode == 200) {
+        final resJson = jsonDecode(response.body);
+        final count = resJson['data']?['count'];
+        return int.tryParse(count?.toString() ?? '0') ?? 0;
+      }
+    } catch (e) {
+      debugPrint('Error fetchCommentCount: $e');
+    }
+    return 0;
+  }
+
   Future<bool> postComment({
     required String path,
     required String comment,
     required String nick,
     String? mail,
     String? link,
+    String? mangaId,
+    String? chapterId,
+    int? rid,
+    String? token,
   }) async {
     try {
-      final cleanPath = path.startsWith('/') ? path.substring(1) : path;
-      final uri = Uri.parse(ApiEndpoints.walineComments);
-      final body = {
-        'path': cleanPath,
-        'comment': comment,
-        'nick': nick,
-        'mail': mail ?? '',
-        'link': link ?? '',
-        'ua': 'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
-      };
+      final pageKey = ApiEndpoints.normalizeCommentKey(
+        path,
+        mangaId: mangaId,
+        chapterId: chapterId,
+      );
+      final isArtalk = ApiEndpoints.commentsBaseUrl.contains('comment/api/v2');
+
+      final Uri uri;
+      final Map<String, dynamic> body;
+
+      if (isArtalk) {
+        uri = Uri.parse(ApiEndpoints.commentsList);
+        body = {
+          'page_key': pageKey,
+          'content': comment,
+          if (rid != null && rid > 0) 'rid': rid,
+        };
+      } else {
+        uri = Uri.parse(ApiEndpoints.walineComments);
+        body = {
+          'path': pageKey,
+          'comment': comment,
+          'nick': nick,
+          'mail': mail ?? '',
+          'link': link ?? '',
+          'ua': ApiEndpoints.userAgent,
+        };
+      }
 
       final response = await _client.post(
         uri,
-        headers: ApiEndpoints.defaultHeaders(token: null),
+        headers: ApiEndpoints.defaultHeaders(token: token),
         body: jsonEncode(body),
       );
 
@@ -491,6 +643,42 @@ class ShngmApiService {
       debugPrint('Error postComment: $e');
       return false;
     }
+  }
+
+  Future<bool> voteComment(
+    String commentId, {
+    bool up = true,
+    String? token,
+  }) async {
+    try {
+      final uri = Uri.parse(ApiEndpoints.commentVote(commentId, up ? 'up' : 'down'));
+      final response = await _client.post(
+        uri,
+        headers: ApiEndpoints.defaultHeaders(token: token),
+        body: '{}',
+      );
+      return response.statusCode == 200 || response.statusCode == 201;
+    } catch (e) {
+      debugPrint('Error voteComment: $e');
+      return false;
+    }
+  }
+
+  Future<String?> fetchChatConnectionToken({String? token}) async {
+    try {
+      final uri = Uri.parse(ApiEndpoints.chatConnectionToken);
+      final response = await _client.get(
+        uri,
+        headers: ApiEndpoints.defaultHeaders(token: token),
+      );
+      if (response.statusCode == 200) {
+        final resJson = jsonDecode(response.body);
+        return resJson['token']?.toString() ?? resJson['data']?.toString();
+      }
+    } catch (e) {
+      debugPrint('Error fetchChatConnectionToken: $e');
+    }
+    return null;
   }
 }
 

@@ -17,15 +17,16 @@ class MangaFlag extends StatelessWidget {
     }
 
     return Container(
-      padding: const EdgeInsets.all(4.5),
+      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 4),
       decoration: BoxDecoration(
-        color: Colors.black.withValues(alpha: 0.65),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.15), width: 0.6),
+        color: const Color(0x8C1C2038),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.14), width: 0.8),
       ),
       child: Text(
         emoji,
-        style: const TextStyle(fontSize: 12, height: 1),
+        semanticsLabel: type,
+        style: const TextStyle(fontSize: 11, height: 1),
       ),
     );
   }

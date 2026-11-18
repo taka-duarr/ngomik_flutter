@@ -1,5 +1,8 @@
+import 'dart:ui' show ImageFilter;
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../../core/constants/api_endpoints.dart';
 import '../../core/constants/app_colors.dart';
 import '../../models/manga.dart';
 import '../../models/chapter.dart';
@@ -9,6 +12,8 @@ import '../../providers/bookmark_provider.dart';
 import '../../providers/history_provider.dart';
 import '../../widgets/chapter_list_tile.dart';
 import '../../widgets/app_network_image.dart';
+import '../../widgets/app_backdrop.dart';
+import '../../widgets/glass_widgets.dart';
 import '../../widgets/google_dots_loading.dart';
 import '../../widgets/liquid_glass_container.dart';
 import '../../widgets/comments_section.dart';
@@ -35,6 +40,7 @@ class _MangaDetailScreenState extends State<MangaDetailScreen> {
   bool _isLoading = true;
   bool _isLoadingChapters = false;
   bool _isAscending = false;
+  bool _synopsisExpanded = false;
 
   // Chapter Pagination State
   int _chapterPage = 1;
@@ -44,18 +50,32 @@ class _MangaDetailScreenState extends State<MangaDetailScreen> {
   String _chapterSearchQuery = '';
 
   final ScrollController _scrollController = ScrollController();
+  final TextEditingController _chapterSearchCtrl = TextEditingController();
+
+  /// True once the header has scrolled under the app bar — drives the
+  /// frosted bar + collapsed title without rebuilding the whole page.
+  final ValueNotifier<bool> _collapsed = ValueNotifier(false);
 
   @override
   void initState() {
     super.initState();
     _manga = widget.initialManga;
+    _scrollController.addListener(_onScroll);
     _fetchDetail();
   }
 
   @override
   void dispose() {
+    _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
+    _chapterSearchCtrl.dispose();
+    _collapsed.dispose();
     super.dispose();
+  }
+
+  void _onScroll() {
+    final collapsed = _scrollController.hasClients && _scrollController.offset > 120;
+    if (collapsed != _collapsed.value) _collapsed.value = collapsed;
   }
 
   void _scrollToComments() {
@@ -109,6 +129,19 @@ class _MangaDetailScreenState extends State<MangaDetailScreen> {
     }
   }
 
+  void _openReader(Manga manga, String chapterId, String chapterNumber) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ReaderScreen(
+          chapterId: chapterId,
+          chapterNumber: chapterNumber,
+          manga: manga,
+        ),
+      ),
+    );
+  }
+
   String _formatViews(int views) {
     if (views >= 1000000) {
       return '${(views / 1000000).toStringAsFixed(1)}M';
@@ -126,712 +159,546 @@ class _MangaDetailScreenState extends State<MangaDetailScreen> {
     final historyProvider = context.watch<HistoryProvider>();
 
     final isBookmarked = manga != null && bookmarkProvider.isBookmarked(manga.id);
-    final lastReadChapter = manga != null ? historyProvider.getLastReadChapter(manga.id) : null;
+    final lastRead = manga != null ? historyProvider.getLastReadChapter(manga.id) : null;
 
-    final filtered = _chapterSearchQuery.trim().isEmpty
+    final query = _chapterSearchQuery.trim().toLowerCase();
+    final filtered = query.isEmpty
         ? _chapters
         : _chapters.where((c) {
-            final query = _chapterSearchQuery.trim().toLowerCase();
             return c.chapterNumber.toLowerCase().contains(query) ||
                 (c.chapterTitle != null && c.chapterTitle!.toLowerCase().contains(query));
           }).toList();
 
     final sortedChapters = _isAscending ? filtered.reversed.toList() : filtered;
     final latestChapter = _chapters.isNotEmpty ? _chapters.first : null;
-    final screenHeight = MediaQuery.of(context).size.height;
 
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      body: _isLoading && manga == null
-          ? const Center(child: GoogleDotsLoading(dotSize: 13, jumpHeight: 18))
-          : Stack(
-              children: [
-                // 1. FULL PAGE CLEAR POSTER BACKGROUND
-                Positioned.fill(
-                  child: AppNetworkImage(
-                    imageUrl: manga?.coverUrl ?? '',
-                    fit: BoxFit.cover,
-                    alignment: Alignment.topCenter,
-                    errorWidget: Container(color: AppColors.background),
-                  ),
-                ),
+    void toggleBookmark() {
+      if (manga != null) bookmarkProvider.toggleBookmark(manga, token: authProvider.token);
+    }
 
-                // 2. SMOOTH GRADIENT OVERLAY (Clear at top for poster view, fades to dark below)
-                Positioned.fill(
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: [
-                          Colors.black.withValues(alpha: 0.15),
-                          Colors.transparent,
-                          Colors.black.withValues(alpha: 0.45),
-                          AppColors.background.withValues(alpha: 0.94),
-                          AppColors.background,
-                        ],
-                        stops: const [0.0, 0.22, 0.44, 0.65, 0.95],
-                      ),
+    return AppBackdrop(
+      child: Scaffold(
+        backgroundColor: Colors.transparent,
+        body: _isLoading && manga == null
+            ? const Center(child: GoogleDotsLoading(dotSize: 13, jumpHeight: 18))
+            : Stack(
+                children: [
+                  // 1. Ambient blurred cover — the colour source for the glass above it.
+                  if (manga != null && manga.coverUrl.isNotEmpty)
+                    Positioned(
+                      top: 0,
+                      left: 0,
+                      right: 0,
+                      height: 520,
+                      child: _AmbientCover(imageUrl: manga.coverUrl),
                     ),
-                  ),
-                ),
 
-                // 3. MAIN SCROLLABLE CONTENT WITH LIQUID GLASS CARDS
-                CustomScrollView(
-                  controller: _scrollController,
-                  slivers: [
-                    // Top App Bar with back, sort, and bookmark (Liquid Glass buttons)
-                    SliverAppBar(
-                      backgroundColor: Colors.transparent,
-                      elevation: 0,
-                      pinned: true,
-                      leading: Padding(
-                        padding: const EdgeInsets.all(8.0),
-                        child: LiquidGlassContainer(
-                          borderRadius: 12,
-                          blur: 16,
-                          color: Colors.black.withValues(alpha: 0.5),
-                          onTap: () => Navigator.pop(context),
-                          child: const Center(
-                            child: Icon(Icons.arrow_back_rounded, color: Colors.white, size: 19),
+                  // 2. Content
+                  CustomScrollView(
+                    controller: _scrollController,
+                    slivers: [
+                      _buildAppBar(manga, isBookmarked, toggleBookmark),
+
+                      if (manga != null)
+                        SliverToBoxAdapter(
+                          child: _buildHeaderCard(
+                            manga,
+                            isBookmarked: isBookmarked,
+                            onBookmark: toggleBookmark,
+                            lastReadId: lastRead?.chapterId,
+                            lastReadNumber: lastRead?.chapterNumber,
+                          ),
+                        ),
+
+                      if (manga?.synopsis.isNotEmpty == true)
+                        SliverToBoxAdapter(child: _buildSynopsis(manga!.synopsis)),
+
+                      if (manga != null)
+                        SliverToBoxAdapter(
+                          child: _buildQuickRow(manga, latestChapter),
+                        ),
+
+                      // ── Chapter list ─────────────────────────────────────
+                      SliverToBoxAdapter(
+                        child: SectionHeader(
+                          title: 'Daftar Chapter',
+                          padding: const EdgeInsets.fromLTRB(20, 8, 12, 10),
+                          trailing: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              GlassTag(
+                                label: '${_totalChapterCount > 0 ? _totalChapterCount : _chapters.length}',
+                                color: AppColors.textSecondary,
+                              ),
+                              const SizedBox(width: 4),
+                              TextButton.icon(
+                                onPressed: () => setState(() => _isAscending = !_isAscending),
+                                style: TextButton.styleFrom(
+                                  foregroundColor: AppColors.textSecondary,
+                                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                                  minimumSize: const Size(0, 36),
+                                ),
+                                icon: Icon(
+                                  _isAscending ? Icons.arrow_upward_rounded : Icons.arrow_downward_rounded,
+                                  size: 16,
+                                ),
+                                label: Text(
+                                  _isAscending ? 'Terlama' : 'Terbaru',
+                                  style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600),
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                       ),
-                      actions: [
-                        // Sort Button (☰)
-                        Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 8.0),
-                          child: LiquidGlassContainer(
-                            borderRadius: 12,
-                            blur: 16,
-                            color: Colors.black.withValues(alpha: 0.5),
-                            onTap: () {
-                              setState(() {
-                                _isAscending = !_isAscending;
-                              });
+
+                      SliverToBoxAdapter(
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                          child: GlassSearchField(
+                            controller: _chapterSearchCtrl,
+                            hintText: 'Cari chapter…  contoh: 120',
+                            onChanged: (v) => setState(() => _chapterSearchQuery = v),
+                            showClear: _chapterSearchQuery.isNotEmpty,
+                            onClear: () {
+                              _chapterSearchCtrl.clear();
+                              setState(() => _chapterSearchQuery = '');
                             },
-                            child: const SizedBox(
-                              width: 40,
-                              height: 40,
-                              child: Icon(
-                                Icons.menu_rounded,
-                                color: Colors.white,
-                                size: 19,
+                          ),
+                        ),
+                      ),
+
+                      if (_isLoadingChapters)
+                        const SliverToBoxAdapter(
+                          child: Padding(
+                            padding: EdgeInsets.symmetric(vertical: 40),
+                            child: Center(child: GoogleDotsLoading(dotSize: 10, jumpHeight: 14)),
+                          ),
+                        )
+                      else if (sortedChapters.isEmpty && !_isLoading)
+                        SliverToBoxAdapter(
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 32, horizontal: 24),
+                            child: Center(
+                              child: Text(
+                                query.isNotEmpty
+                                    ? 'Chapter "$_chapterSearchQuery" tidak ada di halaman ini'
+                                    : 'Belum ada chapter tersedia',
+                                textAlign: TextAlign.center,
+                                style: const TextStyle(color: AppColors.textMuted, fontSize: 13),
                               ),
                             ),
                           ),
-                        ),
-                        const SizedBox(width: 8),
-
-                        // Bookmark Button (🔖)
-                        if (manga != null)
-                          Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 8.0),
-                            child: LiquidGlassContainer(
-                              borderRadius: 12,
-                              blur: 16,
-                              color: Colors.black.withValues(alpha: 0.5),
-                              onTap: () {
-                                bookmarkProvider.toggleBookmark(manga, token: authProvider.token);
+                        )
+                      else
+                        SliverPadding(
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          sliver: SliverList(
+                            delegate: SliverChildBuilderDelegate(
+                              (context, index) {
+                                final ch = sortedChapters[index];
+                                return ChapterListTile(
+                                  chapter: ch,
+                                  manga: manga!,
+                                  isRead: historyProvider.isChapterRead(ch.id),
+                                  isLastRead: lastRead?.chapterId == ch.id,
+                                );
                               },
-                              child: SizedBox(
-                                width: 40,
-                                height: 40,
-                                child: Icon(
-                                  isBookmarked ? Icons.bookmark_rounded : Icons.bookmark_border_rounded,
-                                  color: isBookmarked ? AppColors.primary : Colors.white,
-                                  size: 19,
-                                ),
-                              ),
+                              childCount: sortedChapters.length,
                             ),
                           ),
-                        const SizedBox(width: 8),
-
-                        // Comment Button (💬) - Scroll down to comments
-                        if (manga != null)
-                          Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 8.0),
-                            child: LiquidGlassContainer(
-                              borderRadius: 12,
-                              blur: 16,
-                              color: Colors.black.withValues(alpha: 0.5),
-                              onTap: _scrollToComments,
-                              child: const SizedBox(
-                                width: 40,
-                                height: 40,
-                                child: Icon(
-                                  Icons.chat_bubble_outline_rounded,
-                                  color: AppColors.cyan,
-                                  size: 19,
-                                ),
-                              ),
-                            ),
-                          ),
-                        const SizedBox(width: 14),
-                      ],
-                    ),
-
-                    // Top Poster Spacing (Allows user to enjoy full poster art above)
-                    SliverToBoxAdapter(
-                      child: SizedBox(height: screenHeight * 0.34),
-                    ),
-
-                    // Top Header Section: Badges, Title, Author
-                    SliverToBoxAdapter(
-                      child: Padding(
-                        padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
-                        child: Column(
-                          children: [
-                            // Badges Row (Centered Liquid Glass Pills: Flag, Status, Rating, Views)
-                            SingleChildScrollView(
-                              scrollDirection: Axis.horizontal,
-                              child: Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  // Flag Liquid Glass Pill
-                                  LiquidGlassContainer(
-                                    borderRadius: 20,
-                                    blur: 14,
-                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                    color: Colors.black.withValues(alpha: 0.5),
-                                    border: Border.all(color: Colors.white.withValues(alpha: 0.22)),
-                                    child: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Text(
-                                          manga?.type.toLowerCase().contains('manhua') == true
-                                              ? '🇨🇳'
-                                              : (manga?.type.toLowerCase().contains('manga') == true ? '🇯🇵' : '🇰🇷'),
-                                          style: const TextStyle(fontSize: 12),
-                                        ),
-                                        const SizedBox(width: 5),
-                                        Text(
-                                          manga?.type.isNotEmpty == true ? manga!.type : 'Manhua',
-                                          style: const TextStyle(
-                                            fontSize: 11,
-                                            fontWeight: FontWeight.w700,
-                                            color: Colors.white,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                  const SizedBox(width: 8),
-
-                                  // Status Liquid Glass Pill
-                                  LiquidGlassContainer(
-                                    borderRadius: 20,
-                                    blur: 14,
-                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                    color: const Color(0x66064E3B),
-                                    border: Border.all(color: AppColors.emerald.withValues(alpha: 0.6)),
-                                    child: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Container(
-                                          width: 5,
-                                          height: 5,
-                                          decoration: const BoxDecoration(
-                                            color: Color(0xFF34D399),
-                                            shape: BoxShape.circle,
-                                          ),
-                                        ),
-                                        const SizedBox(width: 5),
-                                        Text(
-                                          manga?.status ?? 'Ongoing',
-                                          style: const TextStyle(
-                                            fontSize: 11,
-                                            fontWeight: FontWeight.w700,
-                                            color: Color(0xFF34D399),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                  const SizedBox(width: 8),
-
-                                  // Rating Liquid Glass Pill
-                                  LiquidGlassContainer(
-                                    borderRadius: 20,
-                                    blur: 14,
-                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                    color: Colors.black.withValues(alpha: 0.5),
-                                    border: Border.all(color: Colors.amber.withValues(alpha: 0.5)),
-                                    child: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        const Icon(Icons.star_rounded, color: Colors.amber, size: 13),
-                                        const SizedBox(width: 4),
-                                        Text(
-                                          (manga?.rating ?? 0) > 0 ? manga!.rating.toStringAsFixed(1) : '8.6',
-                                          style: const TextStyle(
-                                            fontSize: 11,
-                                            fontWeight: FontWeight.w800,
-                                            color: Colors.amber,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                  const SizedBox(width: 8),
-
-                                  // Views Liquid Glass Pill
-                                  LiquidGlassContainer(
-                                    borderRadius: 20,
-                                    blur: 14,
-                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                    color: const Color(0x66312E81),
-                                    border: Border.all(color: const Color(0xFF818CF8).withValues(alpha: 0.5)),
-                                    child: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        const Icon(Icons.visibility_rounded, color: Color(0xFF818CF8), size: 12),
-                                        const SizedBox(width: 4),
-                                        Text(
-                                          _formatViews(manga?.viewCount ?? 74100000),
-                                          style: const TextStyle(
-                                            fontSize: 11,
-                                            fontWeight: FontWeight.w800,
-                                            color: Colors.white,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            const SizedBox(height: 14),
-
-                            // Centered Title
-                            Text(
-                              manga?.title ?? '',
-                              textAlign: TextAlign.center,
-                              style: const TextStyle(
-                                fontSize: 22,
-                                fontWeight: FontWeight.w900,
-                                color: Colors.white,
-                                letterSpacing: -0.3,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-
-                            // Centered Author
-                            Text(
-                              'by ${manga?.author?.isNotEmpty == true ? manga!.author : 'Unknown Author'}',
-                              style: TextStyle(
-                                fontSize: 13,
-                                color: Colors.white.withValues(alpha: 0.75),
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                          ],
                         ),
-                      ),
-                    ),
 
-                    // LIQUID GLASS SINOPSIS BOX
-                    if (manga?.synopsis.isNotEmpty == true)
+                      if (!_isLoadingChapters) SliverToBoxAdapter(child: _buildPaginationBar()),
+
+                      if (manga != null)
+                        SliverToBoxAdapter(
+                          child: CommentsSection(
+                            path: ApiEndpoints.mangaPageKey(manga.id),
+                            title: manga.title,
+                            mangaId: manga.id,
+                          ),
+                        ),
+
                       SliverToBoxAdapter(
-                        child: Padding(
-                          padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                          child: LiquidGlassContainer(
-                            borderRadius: 22,
-                            blur: 24,
-                            color: Colors.white.withValues(alpha: 0.08),
-                            border: Border.all(
-                              color: Colors.white.withValues(alpha: 0.22),
-                              width: 1.2,
-                            ),
-                            padding: const EdgeInsets.all(18),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text(
-                                  'Sinopsis',
-                                  style: TextStyle(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w800,
-                                    color: Colors.white,
-                                  ),
-                                ),
-                                const SizedBox(height: 8),
-                                Text(
-                                  manga!.synopsis,
-                                  style: TextStyle(
-                                    fontSize: 12.5,
-                                    color: Colors.white.withValues(alpha: 0.88),
-                                    height: 1.55,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
+                        child: SizedBox(height: 32 + MediaQuery.of(context).padding.bottom),
                       ),
-
-                    // LIQUID GLASS LATEST CHAPTER CARD (BARU)
-                    if (latestChapter != null)
-                      SliverToBoxAdapter(
-                        child: Padding(
-                          padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-                          child: LiquidGlassContainer(
-                            borderRadius: 18,
-                            blur: 20,
-                            color: const Color(0x882E236C),
-                            border: Border.all(
-                              color: const Color(0x99818CF8),
-                              width: 1.2,
-                            ),
-                            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-                            onTap: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => ReaderScreen(
-                                    chapterId: latestChapter.id,
-                                    chapterNumber: latestChapter.chapterNumber,
-                                    manga: manga!,
-                                  ),
-                                ),
-                              );
-                            },
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Text(
-                                  'Chapter ${latestChapter.chapterNumber}',
-                                  style: const TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w800,
-                                    color: Colors.white,
-                                  ),
-                                ),
-                                const Text(
-                                  'BARU',
-                                  style: TextStyle(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w900,
-                                    color: Colors.white,
-                                    letterSpacing: 1.2,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-
-                    // LIQUID GLASS KOMENTAR KOMIK BANNER - Scroll down to comments
-                    if (manga != null)
-                      SliverToBoxAdapter(
-                        child: Padding(
-                          padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-                          child: LiquidGlassContainer(
-                            borderRadius: 16,
-                            blur: 18,
-                            color: const Color(0x550D111A),
-                            border: Border.all(color: Colors.white.withValues(alpha: 0.16)),
-                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                            onTap: _scrollToComments,
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Row(
-                                  children: [
-                                    Container(
-                                      padding: const EdgeInsets.all(8),
-                                      decoration: BoxDecoration(
-                                        color: AppColors.cyan.withValues(alpha: 0.18),
-                                        borderRadius: BorderRadius.circular(10),
-                                      ),
-                                      child: const Icon(
-                                        Icons.chat_bubble_outline_rounded,
-                                        color: AppColors.cyan,
-                                        size: 18,
-                                      ),
-                                    ),
-                                    const SizedBox(width: 12),
-                                    const Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          'Komentar & Diskusi',
-                                          style: TextStyle(
-                                            fontSize: 13.5,
-                                            fontWeight: FontWeight.w700,
-                                            color: Colors.white,
-                                          ),
-                                        ),
-                                        SizedBox(height: 2),
-                                        Text(
-                                          'Bagikan pendapatmu tentang komik ini',
-                                          style: TextStyle(
-                                            fontSize: 11,
-                                            color: AppColors.textMuted,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ],
-                                ),
-                                const Icon(Icons.chevron_right_rounded, color: Colors.white70, size: 20),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-
-                    // LIQUID GLASS SEARCH CHAPTER BAR
-                    SliverToBoxAdapter(
-                      child: Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
-                        child: LiquidGlassContainer(
-                          borderRadius: 16,
-                          blur: 16,
-                          height: 46,
-                          color: Colors.black.withValues(alpha: 0.4),
-                          border: Border.all(
-                            color: Colors.white.withValues(alpha: 0.22),
-                            width: 1.0,
-                          ),
-                          child: Center(
-                            child: TextField(
-                              onChanged: (v) => setState(() => _chapterSearchQuery = v),
-                              style: const TextStyle(fontSize: 13, color: Colors.white),
-                              decoration: InputDecoration(
-                                hintText: 'Cari nomor chapter (contoh: 100, 50)...',
-                                hintStyle: TextStyle(
-                                  fontSize: 12,
-                                  color: Colors.white.withValues(alpha: 0.5),
-                                ),
-                                prefixIcon: Icon(
-                                  Icons.search_rounded,
-                                  size: 18,
-                                  color: Colors.white.withValues(alpha: 0.6),
-                                ),
-                                suffixIcon: _chapterSearchQuery.isNotEmpty
-                                    ? IconButton(
-                                        icon: const Icon(Icons.clear_rounded, size: 16, color: Colors.white70),
-                                        onPressed: () => setState(() => _chapterSearchQuery = ''),
-                                      )
-                                    : null,
-                                border: InputBorder.none,
-                                contentPadding: const EdgeInsets.symmetric(vertical: 12),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-
-                    // Chapter List Header
-                    SliverToBoxAdapter(
-                      child: Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-                        child: Text(
-                          'Daftar Chapter (${_totalChapterCount > 0 ? _totalChapterCount : _chapters.length})',
-                          style: const TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w800,
-                            color: Colors.white,
-                          ),
-                        ),
-                      ),
-                    ),
-
-                    // Chapter List Stream (Cards with Background Image)
-                    if (_isLoadingChapters)
-                      const SliverToBoxAdapter(
-                        child: Padding(
-                          padding: EdgeInsets.symmetric(vertical: 40),
-                          child: Center(
-                            child: GoogleDotsLoading(dotSize: 10, jumpHeight: 14),
-                          ),
-                        ),
-                      )
-                    else if (_chapters.isEmpty && !_isLoading)
-                      const SliverToBoxAdapter(
-                        child: Padding(
-                          padding: EdgeInsets.all(30),
-                          child: Center(
-                            child: Text(
-                              'Belum ada chapter tersedia',
-                              style: TextStyle(color: AppColors.textMuted),
-                            ),
-                          ),
-                        ),
-                      )
-                    else
-                      SliverPadding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        sliver: SliverList(
-                          delegate: SliverChildBuilderDelegate(
-                            (context, index) {
-                              final ch = sortedChapters[index];
-                              final isRead = historyProvider.isChapterRead(ch.id);
-
-                              return ChapterListTile(
-                                chapter: ch,
-                                manga: manga!,
-                                isRead: isRead,
-                              );
-                            },
-                            childCount: sortedChapters.length,
-                          ),
-                        ),
-                      ),
-
-                    // LIQUID GLASS NUMBERED PAGINATION BAR
-                    if (!_isLoadingChapters)
-                      SliverToBoxAdapter(
-                        child: _buildPaginationBar(),
-                      ),
-
-                    // EMBEDDED MANGA COMMENTS & DISCUSSION SECTION
-                    if (manga != null)
-                      SliverToBoxAdapter(
-                        child: CommentsSection(
-                          path: 'series/${manga.id}',
-                          title: manga.title,
-                        ),
-                      ),
-
-                    const SliverToBoxAdapter(child: SizedBox(height: 100)),
-                  ],
-                ),
-
-                // 4. FLOATING ACTION BUTTON (▶ MULAI BACA / LANJUT BACA)
-                if (_chapters.isNotEmpty && manga != null)
-                  Positioned(
-                    right: 16,
-                    bottom: 24,
-                    child: Container(
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(30),
-                        boxShadow: [
-                          BoxShadow(
-                            color: AppColors.primary.withValues(alpha: 0.6),
-                            blurRadius: 18,
-                            spreadRadius: 2,
-                            offset: const Offset(0, 4),
-                          ),
-                        ],
-                      ),
-                      child: ElevatedButton.icon(
-                        onPressed: () {
-                          final targetChapter = lastReadChapter != null
-                              ? _chapters.firstWhere(
-                                  (c) => c.id == lastReadChapter.chapterId,
-                                  orElse: () => _chapters.last,
-                                )
-                              : _chapters.last;
-
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => ReaderScreen(
-                                chapterId: targetChapter.id,
-                                chapterNumber: targetChapter.chapterNumber,
-                                manga: manga,
-                              ),
-                            ),
-                          );
-                        },
-                        icon: const Icon(
-                          Icons.play_arrow_rounded,
-                          color: Colors.white,
-                          size: 20,
-                        ),
-                        label: Text(
-                          lastReadChapter != null ? 'Lanjut Baca' : 'Mulai Baca',
-                          style: const TextStyle(
-                            fontSize: 13.5,
-                            fontWeight: FontWeight.w800,
-                            color: Colors.white,
-                          ),
-                        ),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.primary,
-                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
-                        ),
-                      ),
-                    ),
+                    ],
                   ),
-              ],
-            ),
+                ],
+              ),
+      ),
     );
   }
+
+  // ── App bar ───────────────────────────────────────────────────────────
+
+  Widget _buildAppBar(Manga? manga, bool isBookmarked, VoidCallback onBookmark) {
+    return SliverAppBar(
+      pinned: true,
+      backgroundColor: Colors.transparent,
+      surfaceTintColor: Colors.transparent,
+      elevation: 0,
+      automaticallyImplyLeading: false,
+      titleSpacing: 0,
+      toolbarHeight: 60,
+      flexibleSpace: ValueListenableBuilder<bool>(
+        valueListenable: _collapsed,
+        builder: (context, collapsed, _) {
+          return AnimatedOpacity(
+            duration: const Duration(milliseconds: 200),
+            opacity: collapsed ? 1 : 0,
+            child: ClipRect(
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+                child: Container(
+                  decoration: const BoxDecoration(
+                    color: AppColors.navBackground,
+                    border: Border(bottom: BorderSide(color: AppColors.border)),
+                  ),
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+      title: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        child: Row(
+          children: [
+            GlassIconButton(
+              icon: Icons.arrow_back_rounded,
+              tooltip: 'Kembali',
+              frosted: true,
+              onTap: () => Navigator.pop(context),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                manga?.title ?? '',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 17,
+                  fontWeight: FontWeight.w800,
+                  color: AppColors.textPrimary,
+                ),
+              ),
+            ),
+            if (manga != null) ...[
+              const SizedBox(width: 12),
+              GlassIconButton(
+                icon: Icons.chat_bubble_outline_rounded,
+                tooltip: 'Komentar',
+                frosted: true,
+                onTap: _scrollToComments,
+              ),
+              const SizedBox(width: 8),
+              GlassIconButton(
+                icon: isBookmarked ? Icons.bookmark_rounded : Icons.bookmark_border_rounded,
+                tooltip: isBookmarked ? 'Hapus bookmark' : 'Bookmark',
+                frosted: true,
+                active: isBookmarked,
+                onTap: onBookmark,
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ── Header: cover + metadata + CTA ────────────────────────────────────
+
+  Widget _buildHeaderCard(
+    Manga manga, {
+    required bool isBookmarked,
+    required VoidCallback onBookmark,
+    String? lastReadId,
+    String? lastReadNumber,
+  }) {
+    final lowerType = manga.type.toLowerCase();
+    final flag = lowerType.contains('manhua')
+        ? '🇨🇳'
+        : (lowerType.contains('manga') ? '🇯🇵' : '🇰🇷');
+    final isCompleted = manga.status.toLowerCase() == 'completed';
+    final hasResume = lastReadId != null && lastReadId.isNotEmpty;
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+      child: LiquidGlassContainer(
+        frosted: true,
+        blur: 24,
+        borderRadius: AppRadius.xl,
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Cover
+                Container(
+                  width: 112,
+                  height: 160,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(AppRadius.md),
+                    boxShadow: const [
+                      BoxShadow(color: Color(0x59101225), blurRadius: 16, offset: Offset(0, 8)),
+                    ],
+                  ),
+                  foregroundDecoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(AppRadius.md),
+                    border: Border.all(color: Colors.white.withValues(alpha: 0.14)),
+                  ),
+                  clipBehavior: Clip.antiAlias,
+                  child: AppNetworkImage(
+                    imageUrl: manga.coverUrl,
+                    fit: BoxFit.cover,
+                    errorWidget: Container(color: AppColors.card),
+                  ),
+                ),
+                const SizedBox(width: 14),
+
+                // Metadata
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        manga.title,
+                        maxLines: 3,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 18,
+                          height: 1.2,
+                          fontWeight: FontWeight.w800,
+                          color: AppColors.textPrimary,
+                          letterSpacing: -0.3,
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      _InfoLine(
+                        label: 'Penulis',
+                        value: manga.author?.isNotEmpty == true ? manga.author! : '-',
+                      ),
+                      _InfoLine(label: 'Tipe', value: '$flag  ${manga.type.isNotEmpty ? manga.type : 'Komik'}'),
+                      _InfoLine(
+                        label: 'Status',
+                        value: manga.status.isNotEmpty ? manga.status : 'Ongoing',
+                        valueColor: isCompleted ? AppColors.accent : AppColors.emerald,
+                      ),
+                      if (manga.viewCount > 0)
+                        _InfoLine(label: 'Dilihat', value: _formatViews(manga.viewCount)),
+                      if (manga.bookmarkCount > 0)
+                        _InfoLine(label: 'Disimpan', value: '${_formatViews(manga.bookmarkCount)} pengguna'),
+                      if (manga.rating > 0) ...[
+                        const SizedBox(height: 4),
+                        _StarRating(rating: manga.rating),
+                      ],
+                    ],
+                  ),
+                ),
+              ],
+            ),
+
+            if (manga.genres.isNotEmpty) ...[
+              const SizedBox(height: 14),
+              Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: manga.genres.take(8).map((g) => GlassTag(label: g, filled: true)).toList(),
+              ),
+            ],
+
+            if (_chapters.isNotEmpty) ...[
+              const SizedBox(height: 14),
+              Row(
+                children: [
+                  Expanded(
+                    child: SizedBox(
+                      height: 46,
+                      child: ElevatedButton.icon(
+                        onPressed: () {
+                          if (hasResume) {
+                            _openReader(manga, lastReadId, lastReadNumber ?? '');
+                          } else {
+                            final first = _chapters.last;
+                            _openReader(manga, first.id, first.chapterNumber);
+                          }
+                        },
+                        icon: const Icon(Icons.play_arrow_rounded, size: 22),
+                        label: Text(
+                          hasResume && (lastReadNumber?.isNotEmpty ?? false)
+                              ? 'Lanjut Ch. $lastReadNumber'
+                              : 'Mulai Baca',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  GlassIconButton(
+                    icon: isBookmarked ? Icons.bookmark_rounded : Icons.bookmark_add_outlined,
+                    tooltip: isBookmarked ? 'Hapus bookmark' : 'Bookmark',
+                    size: 46,
+                    active: isBookmarked,
+                    onTap: onBookmark,
+                  ),
+                ],
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ── Synopsis ──────────────────────────────────────────────────────────
+
+  Widget _buildSynopsis(String synopsis) {
+    final isLong = synopsis.length > 220;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+      child: LiquidGlassContainer(
+        borderRadius: AppRadius.lg,
+        padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
+        boxShadow: const [],
+        onTap: isLong ? () => setState(() => _synopsisExpanded = !_synopsisExpanded) : null,
+        scaleFactor: 0.99,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Sinopsis',
+              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: AppColors.textPrimary),
+            ),
+            const SizedBox(height: 6),
+            AnimatedSize(
+              duration: const Duration(milliseconds: 220),
+              curve: Curves.easeOut,
+              alignment: Alignment.topCenter,
+              child: Text(
+                synopsis,
+                maxLines: _synopsisExpanded ? null : 4,
+                overflow: _synopsisExpanded ? TextOverflow.visible : TextOverflow.ellipsis,
+                style: const TextStyle(fontSize: 12.5, color: AppColors.textSecondary, height: 1.55),
+              ),
+            ),
+            if (isLong)
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Text(
+                  _synopsisExpanded ? 'Tutup' : 'Selengkapnya',
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.primaryLight,
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ── Latest chapter + comments shortcuts ───────────────────────────────
+
+  Widget _buildQuickRow(Manga manga, Chapter? latest) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+      child: Row(
+        children: [
+          if (latest != null) ...[
+            Expanded(
+              child: _QuickTile(
+                icon: Icons.fiber_new_rounded,
+                iconColor: AppColors.primaryLight,
+                title: 'Ch. ${latest.chapterNumber}',
+                subtitle: 'Chapter terbaru',
+                onTap: () => _openReader(manga, latest.id, latest.chapterNumber),
+              ),
+            ),
+            const SizedBox(width: 10),
+          ],
+          Expanded(
+            child: _QuickTile(
+              icon: Icons.forum_outlined,
+              iconColor: AppColors.accent,
+              title: 'Komentar',
+              subtitle: 'Diskusi pembaca',
+              onTap: _scrollToComments,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── Pagination ────────────────────────────────────────────────────────
 
   Widget _buildPaginationBar() {
     if (_totalChapterPages <= 1) return const SizedBox.shrink();
 
+    final canBack = _chapterPage > 1 && !_isLoadingChapters;
+    final canNext = _chapterPage < _totalChapterPages && !_isLoadingChapters;
+
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      padding: const EdgeInsets.fromLTRB(16, 6, 16, 16),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          // First Page Button (≪)
           _buildPaginationBtn(
-            icon: Icons.keyboard_double_arrow_left_rounded,
-            enabled: _chapterPage > 1 && !_isLoadingChapters,
+            icon: Icons.first_page_rounded,
+            tooltip: 'Halaman pertama',
+            enabled: canBack,
             onTap: () => _goToChapterPage(1),
           ),
           const SizedBox(width: 8),
-
-          // Previous Page Button (‹)
           _buildPaginationBtn(
             icon: Icons.chevron_left_rounded,
-            enabled: _chapterPage > 1 && !_isLoadingChapters,
+            tooltip: 'Sebelumnya',
+            enabled: canBack,
             onTap: () => _goToChapterPage(_chapterPage - 1),
           ),
           const SizedBox(width: 8),
-
-          // Page Pill ( 1 / 91 )
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.14),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Colors.white.withValues(alpha: 0.22)),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  '$_chapterPage',
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w800,
-                    color: Colors.white,
+          LiquidGlassContainer(
+            borderRadius: AppRadius.md,
+            boxShadow: const [],
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            child: Text.rich(
+              TextSpan(
+                children: [
+                  TextSpan(
+                    text: '$_chapterPage',
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w800,
+                      color: AppColors.textPrimary,
+                    ),
                   ),
-                ),
-                Text(
-                  ' / $_totalChapterPages',
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.white.withValues(alpha: 0.65),
+                  TextSpan(
+                    text: ' / $_totalChapterPages',
+                    style: const TextStyle(fontSize: 13, color: AppColors.textMuted),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
           const SizedBox(width: 8),
-
-          // Next Page Button (›)
           _buildPaginationBtn(
             icon: Icons.chevron_right_rounded,
-            enabled: _chapterPage < _totalChapterPages && !_isLoadingChapters,
+            tooltip: 'Berikutnya',
+            enabled: canNext,
             onTap: () => _goToChapterPage(_chapterPage + 1),
           ),
           const SizedBox(width: 8),
-
-          // Last Page Button (≫)
           _buildPaginationBtn(
-            icon: Icons.keyboard_double_arrow_right_rounded,
-            enabled: _chapterPage < _totalChapterPages && !_isLoadingChapters,
+            icon: Icons.last_page_rounded,
+            tooltip: 'Halaman terakhir',
+            enabled: canNext,
             onTap: () => _goToChapterPage(_totalChapterPages),
           ),
         ],
@@ -841,28 +708,182 @@ class _MangaDetailScreenState extends State<MangaDetailScreen> {
 
   Widget _buildPaginationBtn({
     required IconData icon,
+    required String tooltip,
     required bool enabled,
     required VoidCallback onTap,
   }) {
-    return GestureDetector(
-      onTap: enabled ? onTap : null,
-      child: Container(
-        width: 38,
-        height: 38,
-        decoration: BoxDecoration(
-          color: enabled ? Colors.white.withValues(alpha: 0.12) : Colors.white.withValues(alpha: 0.04),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: enabled ? Colors.white.withValues(alpha: 0.20) : Colors.white.withValues(alpha: 0.08),
+    return Opacity(
+      opacity: enabled ? 1 : 0.35,
+      child: GlassIconButton(
+        icon: icon,
+        tooltip: tooltip,
+        onTap: enabled ? onTap : null,
+      ),
+    );
+  }
+}
+
+/// Heavily blurred cover art that fades out downward. Rasterised once and
+/// cached by the RepaintBoundary, so scrolling the page above it stays cheap.
+class _AmbientCover extends StatelessWidget {
+  final String imageUrl;
+
+  const _AmbientCover({required this.imageUrl});
+
+  @override
+  Widget build(BuildContext context) {
+    return RepaintBoundary(
+      child: ShaderMask(
+        shaderCallback: (rect) => const LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [Colors.white, Colors.white, Colors.transparent],
+          stops: [0.0, 0.45, 1.0],
+        ).createShader(rect),
+        blendMode: BlendMode.dstIn,
+        // ClipRect keeps the blur's spill inside the masked area, otherwise
+        // it leaks past the bottom edge as a hard line.
+        child: ClipRect(
+          child: Opacity(
+            opacity: 0.75,
+            child: ImageFiltered(
+              imageFilter: ImageFilter.blur(sigmaX: 28, sigmaY: 28, tileMode: TileMode.clamp),
+              child: AppNetworkImage(
+                imageUrl: imageUrl,
+                fit: BoxFit.cover,
+                alignment: Alignment.topCenter,
+                errorWidget: const SizedBox.shrink(),
+              ),
+            ),
           ),
         ),
-        child: Center(
-          child: Icon(
-            icon,
-            size: 18,
-            color: enabled ? Colors.white : Colors.white30,
-          ),
+      ),
+    );
+  }
+}
+
+class _InfoLine extends StatelessWidget {
+  final String label;
+  final String value;
+  final Color? valueColor;
+
+  const _InfoLine({required this.label, required this.value, this.valueColor});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 4),
+      child: Text.rich(
+        TextSpan(
+          children: [
+            TextSpan(text: '$label: ', style: const TextStyle(color: AppColors.textMuted)),
+            TextSpan(
+              text: value,
+              style: TextStyle(color: valueColor ?? AppColors.textSecondary, fontWeight: FontWeight.w600),
+            ),
+          ],
         ),
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: const TextStyle(fontSize: 12),
+      ),
+    );
+  }
+}
+
+/// Five-star row for a 0–10 rating, plus the numeric value.
+class _StarRating extends StatelessWidget {
+  final double rating;
+
+  const _StarRating({required this.rating});
+
+  @override
+  Widget build(BuildContext context) {
+    final stars = (rating / 2).clamp(0, 5);
+    return Semantics(
+      label: 'Rating ${rating.toStringAsFixed(1)} dari 10',
+      excludeSemantics: true,
+      child: Row(
+        children: [
+          for (var i = 0; i < 5; i++)
+            Icon(
+              stars >= i + 1
+                  ? Icons.star_rounded
+                  : stars > i
+                      ? Icons.star_half_rounded
+                      : Icons.star_outline_rounded,
+              size: 15,
+              color: AppColors.amber,
+            ),
+          const SizedBox(width: 6),
+          Text(
+            rating.toStringAsFixed(1),
+            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.textPrimary),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _QuickTile extends StatelessWidget {
+  final IconData icon;
+  final Color iconColor;
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
+
+  const _QuickTile({
+    required this.icon,
+    required this.iconColor,
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return LiquidGlassContainer(
+      borderRadius: AppRadius.lg,
+      boxShadow: const [],
+      padding: const EdgeInsets.all(12),
+      onTap: onTap,
+      child: Row(
+        children: [
+          Container(
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(
+              color: iconColor.withValues(alpha: 0.14),
+              borderRadius: BorderRadius.circular(AppRadius.sm),
+            ),
+            child: Icon(icon, size: 19, color: iconColor),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.w800,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+                Text(
+                  subtitle,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 11, color: AppColors.textMuted),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }

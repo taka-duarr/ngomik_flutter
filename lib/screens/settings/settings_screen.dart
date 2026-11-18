@@ -6,11 +6,16 @@ import '../../core/utils/clipboard_helper.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/bookmark_provider.dart';
 import '../../providers/history_provider.dart';
+import '../../widgets/app_backdrop.dart';
 import '../../widgets/app_network_image.dart';
 import '../auth/login_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
-  const SettingsScreen({super.key});
+  /// When embedded in the profile hub, the profile card, stats and guest
+  /// card are omitted (the hub shows them) and no Scaffold is built.
+  final bool embedded;
+
+  const SettingsScreen({super.key, this.embedded = false});
 
   @override
   State<SettingsScreen> createState() => _SettingsScreenState();
@@ -27,22 +32,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final historyProvider = context.watch<HistoryProvider>();
     final user = authProvider.user;
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text(
-          'Pengaturan & Akun',
-          style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18, letterSpacing: -0.3),
-        ),
-      ),
-      body: ListView(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+    final list = ListView(
+        padding: EdgeInsets.fromLTRB(16, widget.embedded ? 4 : 12, 16, 12),
         children: [
           // 1. User Profile Card
           if (user != null) ...[
+            if (!widget.embedded) ...[
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: AppColors.card,
+                color: AppColors.glassFillStrong,
                 borderRadius: BorderRadius.circular(18),
                 border: Border.all(color: AppColors.primary.withValues(alpha: 0.35), width: 1.2),
                 boxShadow: [
@@ -105,7 +104,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
                               decoration: BoxDecoration(
                                 gradient: user.isPremium
-                                    ? const LinearGradient(colors: [Color(0xFFFFB800), Color(0xFFD97706)])
+                                    ? const LinearGradient(colors: [Color(0xFFFFC857), Color(0xFFE0A53A)])
                                     : AppColors.neonPinkGradient,
                                 borderRadius: BorderRadius.circular(6),
                                 boxShadow: [
@@ -161,7 +160,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   child: Container(
                     padding: const EdgeInsets.all(14),
                     decoration: BoxDecoration(
-                      color: AppColors.card,
+                      color: AppColors.glassFillStrong,
                       borderRadius: BorderRadius.circular(14),
                       border: Border.all(color: AppColors.border),
                     ),
@@ -195,7 +194,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   child: Container(
                     padding: const EdgeInsets.all(14),
                     decoration: BoxDecoration(
-                      color: AppColors.card,
+                      color: AppColors.glassFillStrong,
                       borderRadius: BorderRadius.circular(14),
                       border: Border.all(color: AppColors.border),
                     ),
@@ -204,10 +203,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         Container(
                           padding: const EdgeInsets.all(8),
                           decoration: BoxDecoration(
-                            color: AppColors.cyan.withValues(alpha: 0.15),
+                            color: AppColors.accent.withValues(alpha: 0.15),
                             borderRadius: BorderRadius.circular(10),
                           ),
-                          child: const Icon(Icons.schedule_rounded, color: AppColors.cyan, size: 20),
+                          child: const Icon(Icons.schedule_rounded, color: AppColors.accent, size: 20),
                         ),
                         const SizedBox(width: 12),
                         Column(
@@ -228,11 +227,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
             const SizedBox(height: 14),
 
+            ],
             // Token Management Card
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: AppColors.card,
+                color: AppColors.glassFillStrong,
                 borderRadius: BorderRadius.circular(16),
                 border: Border.all(color: AppColors.border),
               ),
@@ -280,7 +280,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   Container(
                     padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
-                      color: Colors.black.withValues(alpha: 0.5),
+                      color: Colors.black.withValues(alpha: 0.25),
                       borderRadius: BorderRadius.circular(10),
                       border: Border.all(color: AppColors.borderSubtle),
                     ),
@@ -314,12 +314,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
             ),
             const SizedBox(height: 14),
-          ] else ...[
+          ] else if (!widget.embedded) ...[
             // Guest Card
             Container(
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
-                color: AppColors.card,
+                color: AppColors.glassFillStrong,
                 borderRadius: BorderRadius.circular(18),
                 border: Border.all(color: AppColors.primary.withValues(alpha: 0.35)),
                 boxShadow: [
@@ -392,21 +392,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
             decoration: BoxDecoration(
               gradient: LinearGradient(
                 colors: [
-                  AppColors.cyan.withValues(alpha: 0.08),
-                  AppColors.card,
+                  AppColors.accent.withValues(alpha: 0.10),
+                  AppColors.glassFillStrong,
                 ],
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
               ),
               borderRadius: BorderRadius.circular(18),
-              border: Border.all(color: AppColors.cyan.withValues(alpha: 0.3)),
+              border: Border.all(color: AppColors.border),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Row(
                   children: [
-                    Icon(Icons.auto_awesome, color: AppColors.cyan, size: 18),
+                    Icon(Icons.auto_awesome, color: AppColors.accent, size: 18),
                     SizedBox(width: 8),
                     Text(
                       'Panduan Login & Sinkronisasi Akun',
@@ -420,7 +420,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 Container(
                   padding: const EdgeInsets.all(3),
                   decoration: BoxDecoration(
-                    color: Colors.black.withValues(alpha: 0.4),
+                    color: Colors.black.withValues(alpha: 0.2),
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Row(
@@ -432,7 +432,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             padding: const EdgeInsets.symmetric(vertical: 7),
                             decoration: BoxDecoration(
                               color: _guideTab == 'pc'
-                                  ? AppColors.cyan.withValues(alpha: 0.25)
+                                  ? AppColors.accent.withValues(alpha: 0.25)
                                   : Colors.transparent,
                               borderRadius: BorderRadius.circular(8),
                             ),
@@ -440,14 +440,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             child: const Row(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                Icon(Icons.touch_app_rounded, size: 15, color: AppColors.cyan),
+                                Icon(Icons.touch_app_rounded, size: 15, color: AppColors.accent),
                                 SizedBox(width: 6),
                                 Text(
                                   'Cara Otomatis (Mudah)',
                                   style: TextStyle(
                                     fontSize: 12,
                                     fontWeight: FontWeight.w700,
-                                    color: AppColors.cyan,
+                                    color: AppColors.accent,
                                   ),
                                 ),
                               ],
@@ -511,7 +511,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: AppColors.card,
+              color: AppColors.glassFillStrong,
               borderRadius: BorderRadius.circular(18),
               border: Border.all(color: AppColors.border),
             ),
@@ -529,7 +529,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ],
                 ),
                 const SizedBox(height: 14),
-                _buildInfoRow('Tema Tampilan', 'Dark OLED Nebula (Active)'),
+                _buildInfoRow('Tema Tampilan', 'Glass Slate'),
                 const Divider(color: AppColors.border, height: 20),
                 _buildInfoRow('Mode Pembaca', 'Continuous Vertical Webtoon'),
                 const Divider(color: AppColors.border, height: 20),
@@ -570,7 +570,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w800, color: Colors.white),
                       ),
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.surface,
+                        backgroundColor: AppColors.cardLighter,
                         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(10),
@@ -579,6 +579,47 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ),
                     ),
                   ],
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          // About card with the brand mark
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: AppColors.glassFillStrong,
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(color: AppColors.border),
+            ),
+            child: Row(
+              children: [
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(AppRadius.md),
+                  child: Image.asset('assets/images/logo.png', width: 56, height: 56),
+                ),
+                const SizedBox(width: 14),
+                const Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text.rich(
+                        TextSpan(
+                          children: [
+                            TextSpan(text: 'ngo', style: TextStyle(color: AppColors.textPrimary)),
+                            TextSpan(text: 'mik', style: TextStyle(color: AppColors.primaryLight)),
+                          ],
+                        ),
+                        style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, letterSpacing: -0.6),
+                      ),
+                      SizedBox(height: 2),
+                      Text(
+                        'Baca komik, tanpa ribet · v1.0.0',
+                        style: TextStyle(fontSize: 12, color: AppColors.textMuted),
+                      ),
+                    ],
+                  ),
                 ),
               ],
             ),
@@ -609,8 +650,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
             ),
 
-          const SizedBox(height: 96),
+          const SizedBox(height: 120),
         ],
+      );
+
+    if (widget.embedded) return list;
+
+    return AppBackdrop(
+      child: Scaffold(
+        backgroundColor: Colors.transparent,
+        appBar: AppBar(
+          titleSpacing: (ModalRoute.of(context)?.impliesAppBarDismissal ?? false) ? 0 : 20,
+          title: const Text('Akun & Pengaturan'),
+        ),
+        body: list,
       ),
     );
   }
@@ -625,13 +678,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
             width: 20,
             height: 20,
             decoration: BoxDecoration(
-              color: AppColors.cyan.withValues(alpha: 0.25),
+              color: AppColors.accent.withValues(alpha: 0.25),
               shape: BoxShape.circle,
             ),
             alignment: Alignment.center,
             child: Text(
               num,
-              style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w900, color: AppColors.cyan),
+              style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w900, color: AppColors.accent),
             ),
           ),
           const SizedBox(width: 10),

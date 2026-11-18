@@ -17,8 +17,11 @@ class ClipboardHelper {
   static bool isShinigamiToken(String? text) {
     if (text == null) return false;
     final trimmed = text.trim();
-    return trimmed.startsWith('v4.public.') ||
-        trimmed.startsWith('Bearer v4.public.');
+    final clean = cleanToken(trimmed);
+    return clean.startsWith('v4.public.') ||
+        clean.startsWith('eyJ') ||
+        (clean.split('.').length == 3 && clean.length > 30) ||
+        (clean.length > 30 && RegExp(r'^[A-Za-z0-9_\-\.]+$').hasMatch(clean));
   }
 
   static String cleanToken(String text) {

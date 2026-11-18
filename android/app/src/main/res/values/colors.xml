@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Matches AppColors.background so native splash → Flutter has no flash -->
+    <color name="splash_background">#242942</color>
+</resources>

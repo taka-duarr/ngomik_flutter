@@ -3,19 +3,64 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 class ApiEndpoints {
   ApiEndpoints._();
 
-  // Base URLs directly from .env
-  static String get baseUrl => dotenv.env['API_BASE_URL'] ?? '';
-  static String get walineComments => dotenv.env['WALINE_API_URL'] ?? '';
-  static String get origin => dotenv.env['DEFAULT_ORIGIN'] ?? '';
-  static String get referer => dotenv.env['DEFAULT_REFERER'] ?? '';
-  static String get assetsBaseUrl => dotenv.env['ASSETS_BASE_URL'] ?? 'https://assets.shngm.id';
-  static String get userAgent =>
-      dotenv.env['USER_AGENT'] ??
-      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+  static String _getEnv(String key, String fallback) {
+    if (dotenv.isInitialized) {
+      return dotenv.env[key] ?? fallback;
+    }
+    return fallback;
+  }
+
+  // Base URLs directly from .env (with safe fallbacks if dotenv is not yet initialized)
+  static String get baseUrl => _getEnv('API_BASE_URL', 'https://api.shinigami.io');
+  static String get commentsBaseUrl => _getEnv('WALINE_API_URL', 'https://api.shinigami.io/comment/api/v2');
+  static String get walineComments => commentsBaseUrl;
+  static String get commentsList => '$commentsBaseUrl/comments';
+  static String get commentsStats => '$commentsBaseUrl/stats/page_comment_info';
+  static String get chatConnectionToken => '$commentsBaseUrl/chat/connection-token';
+  static String commentVote(String commentId, String action) => '$commentsBaseUrl/votes/comment/$commentId/$action';
+
+  // Page key format helpers for Shinigami Comments
+  static String mangaPageKey(String mangaId) => 'manga:$mangaId';
+  static String chapterPageKey(String mangaId, String chapterId) => 'manga:$mangaId:chapter:$chapterId';
+
+  static String normalizeCommentKey(String path, {String? mangaId, String? chapterId}) {
+    final clean = path.trim().replaceFirst(RegExp(r'^/+'), '');
+    if (clean.startsWith('manga:') || clean.startsWith('post:')) {
+      return clean;
+    }
+    if (clean.startsWith('series/')) {
+      return 'manga:${clean.substring(7)}';
+    }
+    if (clean.startsWith('chapter/')) {
+      final chId = clean.substring(8);
+      if (mangaId != null && mangaId.isNotEmpty) {
+        return 'manga:$mangaId:chapter:$chId';
+      }
+      return 'chapter:$chId';
+    }
+    if (mangaId != null && mangaId.isNotEmpty) {
+      if (chapterId != null && chapterId.isNotEmpty) {
+        return 'manga:$mangaId:chapter:$chapterId';
+      }
+      return 'manga:$mangaId';
+    }
+    return clean;
+  }
+  static String get origin => _getEnv('DEFAULT_ORIGIN', 'https://s1.shinigami.mx');
+  static String get referer => _getEnv('DEFAULT_REFERER', 'https://s1.shinigami.mx/');
+  static String get assetsBaseUrl => _getEnv('ASSETS_BASE_URL', 'https://cdn.shinigami.gg');
+  static String get userAgent => _getEnv(
+        'USER_AGENT',
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      );
 
   // Manga Lists
   static String get latestManga => '$baseUrl/v1/manga/list';
-  static String get searchManga => '$baseUrl/v1/manga/search';
+  static String get searchManga => '$baseUrl/v1/manga/list';
+
+  // Recommendations
+  static String get recommendationHomeHero => '$baseUrl/v1/manga/recommendation/lists/home-hero';
+  static String get recommendationHome => '$baseUrl/v1/manga/recommendation/lists/home';
 
   // Manga Detail & Chapters
   static String mangaDetail(String mangaId) => '$baseUrl/v1/manga/detail/$mangaId';
@@ -33,7 +78,7 @@ class ApiEndpoints {
   static String get bookmarkRemove => '$baseUrl/v1/bookmark/remove';
 
   // Reading History
-  static String get historyList => '$baseUrl/v1/history/list/manga';
+  static String get historyList => '$baseUrl/v1/history/list';
   static String historyGetByManga(String mangaId) => '$baseUrl/v1/history/get-by-manga/$mangaId';
   static String get historyAdd => '$baseUrl/v1/history/add';
   static String get historyRemove => '$baseUrl/v1/history/remove';

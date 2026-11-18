@@ -68,21 +68,23 @@ class MangaProvider with ChangeNotifier {
 
     try {
       final results = await Future.wait([
-        // 1. Trending for Hero Banner (Default list)
-        _apiService.fetchMangaList(page: 1, pageSize: 24),
+        // 1. Official Recommendation List for Hero Banner
+        _apiService.fetchHomeHeroManga(),
         // 2. Recently Updated (sort=latest)
         _apiService.fetchMangaList(page: 1, pageSize: 24, sort: 'latest'),
         // 3. Popular Series (sort=bookmark)
         _apiService.fetchMangaList(page: 1, pageSize: 24, sort: 'bookmark'),
       ]);
 
-      final trending = results[0];
+      final heroList = results[0];
       final latest = results[1];
       final popular = results[2];
 
-      _heroManga = trending.take(6).toList();
+      _heroManga = heroList.isNotEmpty
+          ? heroList.take(10).toList()
+          : (popular.isNotEmpty ? popular.take(6).toList() : latest.take(6).toList());
       _recentManga = latest;
-      _popularManga = popular.isNotEmpty ? popular : trending;
+      _popularManga = popular.isNotEmpty ? popular : latest;
       _hasMorePopular = _popularManga.isNotEmpty;
     } catch (e) {
       debugPrint('Error loadHomeFeed: $e');

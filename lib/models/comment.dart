@@ -8,6 +8,8 @@ class WalineComment {
   final int like;
   final int level;
   final int replyCount;
+  final int rid;
+  final String? stickerUrl;
   final List<WalineComment> replies;
   final List<String> imageUrls;
 
@@ -21,9 +23,43 @@ class WalineComment {
     this.like = 0,
     this.level = 1,
     this.replyCount = 0,
+    this.rid = 0,
+    this.stickerUrl,
     this.replies = const [],
     this.imageUrls = const [],
   });
+
+  WalineComment copyWith({
+    String? id,
+    String? nick,
+    String? comment,
+    String? orig,
+    String? avatar,
+    String? insertedAt,
+    int? like,
+    int? level,
+    int? replyCount,
+    int? rid,
+    String? stickerUrl,
+    List<WalineComment>? replies,
+    List<String>? imageUrls,
+  }) {
+    return WalineComment(
+      id: id ?? this.id,
+      nick: nick ?? this.nick,
+      comment: comment ?? this.comment,
+      orig: orig ?? this.orig,
+      avatar: avatar ?? this.avatar,
+      insertedAt: insertedAt ?? this.insertedAt,
+      like: like ?? this.like,
+      level: level ?? this.level,
+      replyCount: replyCount ?? this.replyCount,
+      rid: rid ?? this.rid,
+      stickerUrl: stickerUrl ?? this.stickerUrl,
+      replies: replies ?? this.replies,
+      imageUrls: imageUrls ?? this.imageUrls,
+    );
+  }
 
   String get cleanComment {
     String text = comment;
@@ -74,8 +110,11 @@ class WalineComment {
       }
     }
 
-    final rawComment = json['comment']?.toString() ?? '';
-    final rawOrig = json['orig']?.toString() ?? '';
+    final rawComment = json['comment']?.toString() ??
+        json['content_marked']?.toString() ??
+        json['content']?.toString() ??
+        '';
+    final rawOrig = json['orig']?.toString() ?? json['content']?.toString() ?? '';
 
     // Extract images from html <img> and markdown ![]()
     final List<String> imgs = [];
@@ -98,16 +137,33 @@ class WalineComment {
     int rawLevel = int.tryParse(json['level']?.toString() ?? '1') ?? 1;
     if (rawLevel == 0) rawLevel = 1;
 
+    final stickerObj = json['sticker'];
+    String? stickerUrl;
+    if (stickerObj is Map && stickerObj['public_url'] != null) {
+      stickerUrl = stickerObj['public_url'].toString();
+      if (!imgs.contains(stickerUrl)) {
+        imgs.add(stickerUrl);
+      }
+    }
+
+    final avatarUrl = json['avatar_url']?.toString() ?? json['avatar']?.toString();
+    final rid = int.tryParse(json['rid']?.toString() ?? '0') ?? 0;
+
     return WalineComment(
       id: json['objectId']?.toString() ?? json['id']?.toString() ?? '',
-      nick: json['nick']?.toString() ?? 'Pembaca Anonim',
+      nick: json['nick']?.toString() ?? json['username']?.toString() ?? 'Pembaca Anonim',
       comment: rawComment,
       orig: rawOrig,
-      avatar: json['avatar']?.toString(),
-      insertedAt: json['insertedAt']?.toString() ?? json['time']?.toString() ?? json['created_at']?.toString(),
-      like: int.tryParse(json['like']?.toString() ?? '0') ?? 0,
+      avatar: avatarUrl,
+      insertedAt: json['insertedAt']?.toString() ??
+          json['time']?.toString() ??
+          json['date']?.toString() ??
+          json['created_at']?.toString(),
+      like: int.tryParse((json['like'] ?? json['vote_up'] ?? '0').toString()) ?? 0,
       level: rawLevel,
       replyCount: int.tryParse(json['reply_count']?.toString() ?? '0') ?? repList.length,
+      rid: rid,
+      stickerUrl: stickerUrl,
       replies: repList,
       imageUrls: imgs,
     );

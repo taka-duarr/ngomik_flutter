@@ -8,7 +8,7 @@ import 'providers/auth_provider.dart';
 import 'providers/bookmark_provider.dart';
 import 'providers/history_provider.dart';
 import 'providers/manga_provider.dart';
-import 'screens/main_navigation_shell.dart';
+import 'screens/splash/splash_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -20,19 +20,16 @@ void main() async {
     debugPrint('Warning: .env file could not be loaded: $e');
   }
 
-  // Clear in-memory image cache to avoid decoder artifacts
-  PaintingBinding.instance.imageCache.clear();
-  PaintingBinding.instance.imageCache.clearLiveImages();
-  // Limit cache: 100 images max, 100 MB max — prevent OOM on mid-range devices
-  PaintingBinding.instance.imageCache.maximumSize = 100;
-  PaintingBinding.instance.imageCache.maximumSizeBytes = 100 * 1024 * 1024;
+  // Optimize image cache: 500 images max, 400 MB max — prevents evicting read comic strips when scrolling
+  PaintingBinding.instance.imageCache.maximumSize = 500;
+  PaintingBinding.instance.imageCache.maximumSizeBytes = 400 * 1024 * 1024;
 
   // Set immersive dark status bar & navigation bar
   SystemChrome.setSystemUIOverlayStyle(
     const SystemUiOverlayStyle(
       statusBarColor: Colors.transparent,
       statusBarIconBrightness: Brightness.light,
-      systemNavigationBarColor: AppColors.surface,
+      systemNavigationBarColor: AppColors.background,
       systemNavigationBarIconBrightness: Brightness.light,
     ),
   );
@@ -42,10 +39,15 @@ void main() async {
   final historyProvider = HistoryProvider();
   final mangaProvider = MangaProvider();
 
-  // Initialize storage & providers
-  await authProvider.init();
-  await bookmarkProvider.init(token: authProvider.token);
-  await historyProvider.init(token: authProvider.token);
+  // Providers are initialised while the animated splash plays, instead of
+  // blocking the first frame.
+  Future<void> bootstrap() async {
+    await authProvider.init();
+    await Future.wait([
+      bookmarkProvider.init(token: authProvider.token),
+      historyProvider.init(token: authProvider.token),
+    ]);
+  }
 
   runApp(
     NgomikApp(
@@ -53,6 +55,7 @@ void main() async {
       bookmarkProvider: bookmarkProvider,
       historyProvider: historyProvider,
       mangaProvider: mangaProvider,
+      bootstrap: bootstrap,
     ),
   );
 }
@@ -62,6 +65,7 @@ class NgomikApp extends StatelessWidget {
   final BookmarkProvider? bookmarkProvider;
   final HistoryProvider? historyProvider;
   final MangaProvider? mangaProvider;
+  final Future<void> Function()? bootstrap;
 
   const NgomikApp({
     super.key,
@@ -69,6 +73,7 @@ class NgomikApp extends StatelessWidget {
     this.bookmarkProvider,
     this.historyProvider,
     this.mangaProvider,
+    this.bootstrap,
   });
 
   @override
@@ -96,7 +101,7 @@ class NgomikApp extends StatelessWidget {
         title: 'Ngomik',
         debugShowCheckedModeBanner: false,
         theme: AppTheme.darkTheme,
-        home: const MainNavigationShell(),
+        home: SplashScreen(bootstrap: bootstrap),
       ),
     );
   }

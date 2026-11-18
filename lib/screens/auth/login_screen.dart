@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../core/constants/app_colors.dart';
+import '../../widgets/app_backdrop.dart';
 import '../../core/utils/clipboard_helper.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/bookmark_provider.dart';
@@ -99,7 +100,7 @@ class _LoginScreenState extends State<LoginScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(authProvider.errorMessage ?? 'Gagal menghubungkan akun.'),
-          backgroundColor: Colors.red,
+          backgroundColor: AppColors.danger,
         ),
       );
     }
@@ -109,9 +110,12 @@ class _LoginScreenState extends State<LoginScreen> {
   Widget build(BuildContext context) {
     final authProvider = context.watch<AuthProvider>();
 
-    return Scaffold(
+    return AppBackdrop(
+      child: Scaffold(
+      backgroundColor: Colors.transparent,
       appBar: AppBar(
-        title: const Text('Hubungkan Akun', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 18)),
+        titleSpacing: 0,
+        title: const Text('Hubungkan Akun'),
       ),
       body: ListView(
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
@@ -161,7 +165,7 @@ class _LoginScreenState extends State<LoginScreen> {
               gradient: LinearGradient(
                 colors: [
                   AppColors.primary.withValues(alpha: 0.25),
-                  const Color(0xFF131B2E),
+                  const Color(0xFF2A2F4C),
                 ],
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
@@ -187,7 +191,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         color: AppColors.primary.withValues(alpha: 0.3),
                         borderRadius: BorderRadius.circular(10),
                       ),
-                      child: const Icon(Icons.auto_awesome, color: AppColors.cyan, size: 22),
+                      child: const Icon(Icons.auto_awesome, color: AppColors.accent, size: 22),
                     ),
                     const SizedBox(width: 12),
                     const Expanded(
@@ -201,7 +205,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           SizedBox(height: 2),
                           Text(
                             'Paling Mudah • Anti Ribet',
-                            style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: AppColors.cyan),
+                            style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: AppColors.accent),
                           ),
                         ],
                       ),
@@ -240,7 +244,7 @@ class _LoginScreenState extends State<LoginScreen> {
           // Collapsible Manual Input Accordion
           Container(
             decoration: BoxDecoration(
-              color: AppColors.card,
+              color: AppColors.glassFillStrong,
               borderRadius: BorderRadius.circular(16),
               border: Border.all(color: AppColors.border),
             ),
@@ -346,6 +350,7 @@ class _LoginScreenState extends State<LoginScreen> {
           ),
           const SizedBox(height: 32),
         ],
+      ),
       ),
     );
   }

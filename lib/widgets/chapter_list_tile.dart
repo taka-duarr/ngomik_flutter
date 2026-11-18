@@ -7,16 +7,25 @@ import 'app_network_image.dart';
 import 'bouncing_tap.dart';
 import '../screens/reader/reader_screen.dart';
 
+/// One row in the episode list. Keeps the chapter-thumbnail backdrop, tinted
+/// into the app palette, with a thin magenta outline like the reference.
+///
+/// States:
+/// - unread     → bright text, magenta outline
+/// - read       → dimmed, "Dibaca" check
+/// - last read  → magenta edge bar + "Terakhir dibaca", so it's easy to find
 class ChapterListTile extends StatelessWidget {
   final Chapter chapter;
   final Manga manga;
   final bool isRead;
+  final bool isLastRead;
 
   const ChapterListTile({
     super.key,
     required this.chapter,
     required this.manga,
     required this.isRead,
+    this.isLastRead = false,
   });
 
   @override
@@ -27,165 +36,204 @@ class ChapterListTile extends StatelessWidget {
 
     final dateText = chapter.releaseDate != null && chapter.releaseDate!.isNotEmpty
         ? DateFormatter.timeAgo(chapter.releaseDate)
-        : 'Update Terbaru';
+        : 'Update terbaru';
 
-    return BouncingTap(
-      scaleFactor: 0.97,
-      onTap: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) => ReaderScreen(
-              chapterId: chapter.id,
-              chapterNumber: chapter.chapterNumber,
-              manga: manga,
-            ),
-          ),
-        );
-      },
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 10),
-        height: 72,
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: isRead
-                ? AppColors.emerald.withValues(alpha: 0.4)
-                : Colors.white.withValues(alpha: 0.14),
-            width: 0.8,
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.35),
-              blurRadius: 10,
-              offset: const Offset(0, 4),
-            ),
-          ],
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            // 1. Chapter Thumbnail Background Image
-            AppNetworkImage(
-              imageUrl: bgImageUrl,
-              fit: BoxFit.cover,
-              errorWidget: Container(color: AppColors.card),
-            ),
+    final hasTitle = chapter.chapterTitle != null &&
+        chapter.chapterTitle!.trim().isNotEmpty &&
+        !chapter.chapterTitle!.toLowerCase().contains('chapter ${chapter.chapterNumber}');
 
-            // 2. Dark Horizontal Gradient Overlay for Text Readability
-            Positioned.fill(
-              child: DecoratedBox(
+    final dimmed = isRead && !isLastRead;
+
+    final borderColor = isLastRead
+        ? AppColors.primaryLight.withValues(alpha: 0.7)
+        : dimmed
+            ? Colors.white.withValues(alpha: 0.08)
+            : AppColors.borderAccent;
+
+    return Semantics(
+      button: true,
+      label: 'Chapter ${chapter.chapterNumber}${isRead ? ', sudah dibaca' : ''}',
+      excludeSemantics: true,
+      child: BouncingTap(
+        scaleFactor: 0.98,
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => ReaderScreen(
+                chapterId: chapter.id,
+                chapterNumber: chapter.chapterNumber,
+                manga: manga,
+              ),
+            ),
+          );
+        },
+        child: Container(
+          margin: const EdgeInsets.only(bottom: 10),
+          height: 72,
+          decoration: BoxDecoration(
+            color: AppColors.card,
+            borderRadius: BorderRadius.circular(AppRadius.md),
+          ),
+          foregroundDecoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(AppRadius.md),
+            border: Border.all(color: borderColor, width: isLastRead ? 1.2 : 1),
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              // 1. Thumbnail backdrop, slightly desaturated when already read
+              Opacity(
+                opacity: dimmed ? 0.45 : 1,
+                child: AppNetworkImage(
+                  imageUrl: bgImageUrl,
+                  fit: BoxFit.cover,
+                  errorWidget: Container(color: AppColors.card),
+                ),
+              ),
+
+              // 2. Palette-tinted scrim, solid on the text side
+              const DecoratedBox(
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
                     begin: Alignment.centerLeft,
                     end: Alignment.centerRight,
                     colors: [
-                      Colors.black.withValues(alpha: 0.94),
-                      Colors.black.withValues(alpha: 0.78),
-                      Colors.black.withValues(alpha: 0.45),
-                      Colors.black.withValues(alpha: 0.25),
+                      Color(0xF51C2038),
+                      Color(0xD91C2038),
+                      Color(0x991C2038),
+                      Color(0x731C2038),
                     ],
-                    stops: const [0.0, 0.45, 0.75, 1.0],
+                    stops: [0.0, 0.45, 0.78, 1.0],
                   ),
                 ),
               ),
-            ),
 
-            // Extra dark tint for read chapters
-            if (isRead)
-              Positioned.fill(
-                child: Container(
-                  color: Colors.black.withValues(alpha: 0.38),
+              // 3. Last-read edge marker
+              if (isLastRead)
+                const Positioned(
+                  left: 0,
+                  top: 0,
+                  bottom: 0,
+                  width: 3,
+                  child: ColoredBox(color: AppColors.primary),
                 ),
-              ),
 
-            // 3. Content Row
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Row(
-                children: [
-                  // Left: Chapter Number & Release Date
-                  Expanded(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Text(
-                              'Chapter ${chapter.chapterNumber}',
-                              style: const TextStyle(
-                                fontSize: 15,
-                                fontWeight: FontWeight.w800,
-                                color: Colors.white,
-                                letterSpacing: -0.2,
-                              ),
+              // 4. Content
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 12, 0),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            hasTitle
+                                ? 'Chapter ${chapter.chapterNumber} · ${chapter.chapterTitle!.trim()}'
+                                : 'Chapter ${chapter.chapterNumber}',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 14.5,
+                              fontWeight: FontWeight.w800,
+                              color: dimmed ? AppColors.textMuted : AppColors.textPrimary,
+                              letterSpacing: -0.2,
                             ),
-                            if (isRead) ...[
-                              const SizedBox(width: 6),
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
-                                decoration: BoxDecoration(
-                                  color: AppColors.emerald.withValues(alpha: 0.25),
-                                  borderRadius: BorderRadius.circular(4),
-                                  border: Border.all(color: AppColors.emerald, width: 0.6),
-                                ),
-                                child: const Text(
-                                  'DIBACA',
+                          ),
+                          const SizedBox(height: 4),
+                          Row(
+                            children: [
+                              if (isLastRead) ...[
+                                const Icon(Icons.bookmark_rounded, size: 12, color: AppColors.primaryLight),
+                                const SizedBox(width: 4),
+                                const Text(
+                                  'Terakhir dibaca',
                                   style: TextStyle(
-                                    fontSize: 8.5,
-                                    fontWeight: FontWeight.w900,
+                                    fontSize: 11.5,
+                                    fontWeight: FontWeight.w700,
+                                    color: AppColors.primaryLight,
+                                  ),
+                                ),
+                                const _Dot(),
+                              ] else if (isRead) ...[
+                                const Icon(Icons.check_rounded, size: 13, color: AppColors.emerald),
+                                const SizedBox(width: 3),
+                                const Text(
+                                  'Dibaca',
+                                  style: TextStyle(
+                                    fontSize: 11.5,
+                                    fontWeight: FontWeight.w700,
                                     color: AppColors.emerald,
-                                    letterSpacing: 0.4,
+                                  ),
+                                ),
+                                const _Dot(),
+                              ],
+                              Flexible(
+                                child: Text(
+                                  dateText,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    fontSize: 11.5,
+                                    color: AppColors.textMuted,
+                                    fontWeight: FontWeight.w500,
                                   ),
                                 ),
                               ),
                             ],
-                          ],
-                        ),
-                        const SizedBox(height: 3),
-                        Text(
-                          dateText,
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Colors.white.withValues(alpha: 0.7),
-                            fontWeight: FontWeight.w500,
                           ),
-                        ),
-                      ],
-                    ),
-                  ),
-
-                  // Right: Heart Button
-                  Container(
-                    width: 38,
-                    height: 38,
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.95),
-                      borderRadius: BorderRadius.circular(10),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.25),
-                          blurRadius: 6,
-                          offset: const Offset(0, 2),
-                        ),
-                      ],
-                    ),
-                    child: const Center(
-                      child: Icon(
-                        Icons.favorite_border_rounded,
-                        color: Color(0xFFE11D48),
-                        size: 19,
+                        ],
                       ),
                     ),
-                  ),
-                ],
+                    const SizedBox(width: 10),
+
+                    // Read affordance
+                    Container(
+                      width: 36,
+                      height: 36,
+                      decoration: BoxDecoration(
+                        color: isLastRead
+                            ? AppColors.primary
+                            : const Color(0x8C1C2038),
+                        borderRadius: BorderRadius.circular(AppRadius.sm),
+                        border: Border.all(
+                          color: isLastRead ? Colors.transparent : Colors.white.withValues(alpha: 0.14),
+                        ),
+                      ),
+                      child: Icon(
+                        Icons.play_arrow_rounded,
+                        size: 20,
+                        color: isLastRead
+                            ? Colors.white
+                            : dimmed
+                                ? AppColors.textMuted
+                                : AppColors.primaryLight,
+                      ),
+                    ),
+                  ],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
+    );
+  }
+}
+
+class _Dot extends StatelessWidget {
+  const _Dot();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 3,
+      height: 3,
+      margin: const EdgeInsets.symmetric(horizontal: 6),
+      decoration: const BoxDecoration(color: AppColors.textDisabled, shape: BoxShape.circle),
     );
   }
 }

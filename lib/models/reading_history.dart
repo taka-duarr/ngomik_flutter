@@ -1,3 +1,5 @@
+import '../core/constants/api_endpoints.dart';
+
 class ReadingHistoryItem {
   final String mangaId;
   final String mangaTitle;
@@ -41,9 +43,9 @@ class ReadingHistoryItem {
         if (val.startsWith('//')) {
           cover = 'https:$val';
         } else if (val.startsWith('/')) {
-          cover = 'https://assets.shngm.id$val';
+          cover = '${ApiEndpoints.assetsBaseUrl}$val';
         } else if (!val.startsWith('http://') && !val.startsWith('https://')) {
-          cover = 'https://assets.shngm.id/$val';
+          cover = '${ApiEndpoints.assetsBaseUrl}/$val';
         } else {
           cover = val;
         }

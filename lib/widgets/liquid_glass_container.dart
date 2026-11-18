@@ -1,16 +1,29 @@
+import 'dart:ui' show ImageFilter;
+
 import 'package:flutter/material.dart';
+import '../core/constants/app_colors.dart';
 import 'bouncing_tap.dart';
 
-/// Ultra-performant Glassmorphic Container with zero BackdropFilter CPU/GPU overhead.
-/// Uses layered semi-transparent gradients, crisp inner borders, and soft shadows
-/// to create a stunning glass aesthetic that runs at a solid 60-120 FPS even on budget devices.
+/// Glass surface used across the app.
+///
+/// By default it is a "cheap" glass: a translucent navy fill, a faint sheen
+/// and a lit hairline edge — no blur, so it is safe inside scrolling lists.
+///
+/// Set [frosted] to `true` for a real backdrop blur. Reserve it for surfaces
+/// that sit over imagery or scrolling content (nav bar, pinned buttons,
+/// sheets, the panel over the detail poster): it costs a save-layer per frame.
 class LiquidGlassContainer extends StatelessWidget {
   final Widget child;
   final EdgeInsetsGeometry? padding;
   final EdgeInsetsGeometry? margin;
   final double borderRadius;
-  final double blur; // Kept for backwards compatibility
+
+  /// Blur sigma used when [frosted] is true.
+  final double blur;
+  final bool frosted;
   final Color? color;
+
+  /// Solid border override. When null, a lit gradient hairline is painted.
   final BoxBorder? border;
   final Gradient? gradient;
   final List<BoxShadow>? boxShadow;
@@ -24,8 +37,9 @@ class LiquidGlassContainer extends StatelessWidget {
     required this.child,
     this.padding,
     this.margin,
-    this.borderRadius = 20.0,
-    this.blur = 0.0,
+    this.borderRadius = AppRadius.lg,
+    this.blur = 18.0,
+    this.frosted = false,
     this.color,
     this.border,
     this.gradient,
@@ -33,44 +47,65 @@ class LiquidGlassContainer extends StatelessWidget {
     this.onTap,
     this.width,
     this.height,
-    this.scaleFactor = 0.96,
+    this.scaleFactor = 0.97,
   });
 
   @override
   Widget build(BuildContext context) {
-    final boxDecoration = BoxDecoration(
-      color: color ?? const Color(0xFF0F1424).withValues(alpha: 0.85),
-      gradient: gradient ??
-          LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              const Color(0xFF1E2640).withValues(alpha: 0.75),
-              const Color(0xFF0D1220).withValues(alpha: 0.85),
-            ],
-          ),
-      borderRadius: BorderRadius.circular(borderRadius),
-      border: border ??
-          Border.all(
-            color: Colors.white.withValues(alpha: 0.12),
-            width: 1.0,
-          ),
-      boxShadow: boxShadow ??
-          [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.35),
-              blurRadius: 14,
-              offset: const Offset(0, 4),
-            ),
-          ],
+    final radius = BorderRadius.circular(borderRadius);
+
+    Widget surface = DecoratedBox(
+      decoration: BoxDecoration(
+        color: color ?? (frosted ? AppColors.glassFill : AppColors.glassFillStrong),
+        gradient: gradient,
+        borderRadius: radius,
+        border: border,
+      ),
+      // Sheen: a faint top-left light so the panel reads as a pane, not a box.
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          borderRadius: radius,
+          gradient: AppColors.glassSheenGradient,
+        ),
+        child: Padding(
+          padding: padding ?? EdgeInsets.zero,
+          child: child,
+        ),
+      ),
     );
+
+    if (border == null) {
+      surface = CustomPaint(
+        foregroundPainter: GlassEdgePainter(radius: borderRadius),
+        child: surface,
+      );
+    }
+
+    if (frosted) {
+      surface = ClipRRect(
+        borderRadius: radius,
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: blur, sigmaY: blur),
+          child: surface,
+        ),
+      );
+    }
 
     Widget content = Container(
       width: width,
       height: height,
-      padding: padding,
-      decoration: boxDecoration,
-      child: child,
+      decoration: BoxDecoration(
+        borderRadius: radius,
+        boxShadow: boxShadow ??
+            const [
+              BoxShadow(
+                color: Color(0x33000000),
+                blurRadius: 18,
+                offset: Offset(0, 6),
+              ),
+            ],
+      ),
+      child: surface,
     );
 
     if (margin != null) {
@@ -78,13 +113,41 @@ class LiquidGlassContainer extends StatelessWidget {
     }
 
     if (onTap != null) {
-      return BouncingTap(
-        scaleFactor: scaleFactor,
-        onTap: onTap,
-        child: content,
-      );
+      return BouncingTap(scaleFactor: scaleFactor, onTap: onTap, child: content);
     }
 
     return content;
   }
+}
+
+/// Paints a 1px rounded-rect stroke that is brighter on the top-left edge,
+/// mimicking light catching the rim of a glass pane.
+class GlassEdgePainter extends CustomPainter {
+  final double radius;
+  final Gradient gradient;
+  final double strokeWidth;
+
+  const GlassEdgePainter({
+    required this.radius,
+    this.gradient = AppColors.glassEdgeGradient,
+    this.strokeWidth = 1.0,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final rect = Offset.zero & size;
+    final rrect = RRect.fromRectAndRadius(
+      rect.deflate(strokeWidth / 2),
+      Radius.circular(radius),
+    );
+    final paint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = strokeWidth
+      ..shader = gradient.createShader(rect);
+    canvas.drawRRect(rrect, paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant GlassEdgePainter old) =>
+      old.radius != radius || old.gradient != gradient || old.strokeWidth != strokeWidth;
 }

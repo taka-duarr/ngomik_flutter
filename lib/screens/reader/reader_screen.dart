@@ -33,6 +33,7 @@ class ReaderScreen extends StatefulWidget {
 class _ReaderScreenState extends State<ReaderScreen> {
   final ShngmApiService _apiService = ShngmApiService();
   final ScrollController _scrollController = ScrollController();
+  final GlobalKey _commentsKey = GlobalKey();
 
   ChapterDetail? _chapterDetail;
   bool _isLoading = true;
@@ -120,11 +121,43 @@ class _ReaderScreenState extends State<ReaderScreen> {
     }
   }
 
-  void _scrollToBottom() {
-    if (_scrollController.hasClients) {
-      _scrollController.animateTo(
+  Future<void> _scrollToBottom() async {
+    if (!_scrollController.hasClients) return;
+
+    // Direct scroll down to comments section without stopping halfway
+    for (int i = 0; i < 30; i++) {
+      if (!_scrollController.hasClients) break;
+
+      // If comments section is already built in the tree, animate smoothly directly into it!
+      if (_commentsKey.currentContext != null) {
+        await Scrollable.ensureVisible(
+          _commentsKey.currentContext!,
+          duration: const Duration(milliseconds: 380),
+          curve: Curves.easeOutCubic,
+          alignment: 0.0,
+        );
+        return;
+      }
+
+      // Fast-advance to current known max to force ListView.builder to build the next chunk
+      final max = _scrollController.position.maxScrollExtent;
+      _scrollController.jumpTo(max);
+      await WidgetsBinding.instance.endOfFrame;
+      await Future.delayed(const Duration(milliseconds: 16));
+    }
+
+    // Final smooth landing at the comments section
+    if (_commentsKey.currentContext != null) {
+      await Scrollable.ensureVisible(
+        _commentsKey.currentContext!,
+        duration: const Duration(milliseconds: 350),
+        curve: Curves.easeOutCubic,
+        alignment: 0.0,
+      );
+    } else if (_scrollController.hasClients) {
+      await _scrollController.animateTo(
         _scrollController.position.maxScrollExtent,
-        duration: const Duration(milliseconds: 650),
+        duration: const Duration(milliseconds: 350),
         curve: Curves.easeOutCubic,
       );
     }
@@ -209,10 +242,10 @@ class _ReaderScreenState extends State<ReaderScreen> {
                             top: topPadding + 54,
                             bottom: bottomPadding + 100,
                           ),
-                          // Only keep ~3 screen heights of content in memory
-                          cacheExtent: MediaQuery.of(context).size.height * 2.5,
+                          // Keep ample buffer of pages rendered so scrolling is instant
+                          cacheExtent: MediaQuery.sizeOf(context).height * 6.0,
                           addRepaintBoundaries: true,
-                          addAutomaticKeepAlives: false,
+                          addAutomaticKeepAlives: true,
                           itemCount: _chapterDetail!.images.length + 2,
                           itemBuilder: (context, index) {
                             // Next Chapter Footer Banner
@@ -222,9 +255,14 @@ class _ReaderScreenState extends State<ReaderScreen> {
 
                             // Embedded Chapter Comments Section
                             if (index == _chapterDetail!.images.length + 1) {
-                              return CommentsSection(
-                                path: 'chapter/$_currentChapterId',
-                                title: '${widget.manga.title} - Ch. $_currentChapterNumber',
+                              return KeyedSubtree(
+                                key: _commentsKey,
+                                child: CommentsSection(
+                                  path: ApiEndpoints.chapterPageKey(widget.manga.id, _currentChapterId),
+                                  title: '${widget.manga.title} - Ch. $_currentChapterNumber',
+                                  mangaId: widget.manga.id,
+                                  chapterId: _currentChapterId,
+                                ),
                               );
                             }
 
@@ -452,7 +490,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
                           child: Row(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              const Icon(Icons.format_list_bulleted_rounded, size: 15, color: AppColors.cyan),
+                              const Icon(Icons.format_list_bulleted_rounded, size: 15, color: AppColors.accent),
                               const SizedBox(width: 6),
                               Flexible(
                                 child: Text(
@@ -670,7 +708,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
       padding: const EdgeInsets.all(22),
       borderRadius: 24,
       blur: 0,
-      color: const Color(0xFF0F1523).withValues(alpha: 0.90),
+      color: const Color(0xFF1F2339).withValues(alpha: 0.90),
       border: Border.all(color: Colors.white.withValues(alpha: 0.20), width: 1.0),
       boxShadow: [
         BoxShadow(
@@ -769,14 +807,14 @@ class _ReaderScreenState extends State<ReaderScreen> {
             height: 44,
             child: OutlinedButton.icon(
               onPressed: _showChapterListModal,
-              icon: const Icon(Icons.format_list_bulleted_rounded, color: AppColors.cyan, size: 18),
+              icon: const Icon(Icons.format_list_bulleted_rounded, color: AppColors.accent, size: 18),
               label: const Text(
                 'List Chapter',
-                style: TextStyle(fontWeight: FontWeight.w700, color: AppColors.cyan, fontSize: 13),
+                style: TextStyle(fontWeight: FontWeight.w700, color: AppColors.accent, fontSize: 13),
               ),
               style: OutlinedButton.styleFrom(
-                side: BorderSide(color: AppColors.cyan.withValues(alpha: 0.4)),
-                backgroundColor: AppColors.cyan.withValues(alpha: 0.10),
+                side: BorderSide(color: AppColors.accent.withValues(alpha: 0.4)),
+                backgroundColor: AppColors.accent.withValues(alpha: 0.10),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
               ),
             ),
@@ -802,9 +840,12 @@ class _ComicImageTile extends StatefulWidget {
   State<_ComicImageTile> createState() => _ComicImageTileState();
 }
 
-class _ComicImageTileState extends State<_ComicImageTile> {
+class _ComicImageTileState extends State<_ComicImageTile> with AutomaticKeepAliveClientMixin {
   int _retryKey = 0;
   bool _isRetrying = false;
+
+  @override
+  bool get wantKeepAlive => true;
 
   Future<void> _reloadImage() async {
     if (_isRetrying) return;
@@ -830,10 +871,12 @@ class _ComicImageTileState extends State<_ComicImageTile> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
+
     if (_isRetrying) {
       return Container(
         height: 280,
-        color: const Color(0xFF0F172A),
+        color: const Color(0xFF1F2339),
         child: Center(
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -862,6 +905,10 @@ class _ComicImageTileState extends State<_ComicImageTile> {
       return _buildErrorWidget(context, 'URL gambar tidak valid');
     }
 
+    final screenWidth = MediaQuery.sizeOf(context).width;
+    final dpr = MediaQuery.devicePixelRatioOf(context);
+    final targetMemWidth = (screenWidth * dpr).round();
+
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: widget.onTap,
@@ -870,11 +917,12 @@ class _ComicImageTileState extends State<_ComicImageTile> {
         imageUrl: cleanUrl,
         httpHeaders: ApiEndpoints.imageHeaders,
         fit: BoxFit.fitWidth,
-        filterQuality: FilterQuality.high,
-        fadeInDuration: const Duration(milliseconds: 150),
+        filterQuality: FilterQuality.medium,
+        memCacheWidth: targetMemWidth > 0 ? targetMemWidth : null,
+        fadeInDuration: const Duration(milliseconds: 60),
         placeholder: (context, url) => Container(
           height: 300,
-          color: const Color(0xFF0F172A),
+          color: const Color(0xFF1F2339),
           child: const Center(
             child: CircularProgressIndicator(
               strokeWidth: 2,
@@ -893,12 +941,12 @@ class _ComicImageTileState extends State<_ComicImageTile> {
       padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 20),
       borderRadius: 18,
       blur: 0,
-      color: const Color(0xFF1E293B).withValues(alpha: 0.90),
+      color: const Color(0xFF2A2F4C).withValues(alpha: 0.90),
       border: Border.all(color: Colors.white.withValues(alpha: 0.15)),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(Icons.broken_image_rounded, color: Color(0xFFF43F5E), size: 36),
+          const Icon(Icons.broken_image_rounded, color: Color(0xFFFF5C7A), size: 36),
           const SizedBox(height: 10),
           Text(
             'Halaman ${widget.pageIndex + 1} Gagal Dimuat',

@@ -6,6 +6,7 @@ import '../screens/detail/manga_detail_screen.dart';
 import 'app_network_image.dart';
 
 import 'bouncing_tap.dart';
+import 'glass_widgets.dart';
 
 class HeroCarousel extends StatefulWidget {
   final List<Manga> mangaList;
@@ -28,12 +29,13 @@ class _HeroCarouselState extends State<HeroCarousel> {
         CarouselSlider.builder(
           itemCount: widget.mangaList.length,
           options: CarouselOptions(
-            height: 205,
+            height: 196,
             autoPlay: true,
             autoPlayInterval: const Duration(seconds: 5),
             autoPlayAnimationDuration: const Duration(milliseconds: 800),
             enlargeCenterPage: true,
-            viewportFraction: 0.94,
+            viewportFraction: 0.9,
+            enlargeFactor: 0.18,
             onPageChanged: (index, reason) {
               setState(() {
                 _currentIndex = index;
@@ -52,12 +54,12 @@ class _HeroCarouselState extends State<HeroCarousel> {
             final isSelected = _currentIndex == entry.key;
             return AnimatedContainer(
               duration: const Duration(milliseconds: 300),
-              width: isSelected ? 22 : 6,
-              height: 5,
-              margin: const EdgeInsets.symmetric(horizontal: 2.5),
+              width: isSelected ? 18 : 6,
+              height: 6,
+              margin: const EdgeInsets.symmetric(horizontal: 3),
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(3),
-                color: isSelected ? AppColors.primary : const Color(0xFF334155),
+                color: isSelected ? AppColors.primary : Colors.white.withValues(alpha: 0.22),
               ),
             );
           }).toList(),
@@ -82,138 +84,72 @@ class _HeroCarouselState extends State<HeroCarousel> {
       },
       child: Container(
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(color: AppColors.border),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.5),
-              blurRadius: 16,
-              offset: const Offset(0, 6),
-            ),
+          borderRadius: BorderRadius.circular(AppRadius.xl),
+          boxShadow: const [
+            BoxShadow(color: Color(0x40101225), blurRadius: 24, offset: Offset(0, 12)),
           ],
+        ),
+        foregroundDecoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(AppRadius.xl),
+          border: Border.all(color: AppColors.borderGlow),
         ),
         clipBehavior: Clip.antiAlias,
         child: Stack(
           fit: StackFit.expand,
           children: [
-            // Background Image
-            AppNetworkImage(
-              imageUrl: image,
-              fit: BoxFit.cover,
-            ),
+            AppNetworkImage(imageUrl: image, fit: BoxFit.cover),
+            const DecoratedBox(decoration: BoxDecoration(gradient: AppColors.coverScrim)),
 
-            // Gradient Overlay
-            Container(
-              decoration: const BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [
-                    Colors.transparent,
-                    Color(0x80000000),
-                    Color(0xF0070A12),
-                  ],
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  stops: [0.2, 0.6, 1.0],
-                ),
-              ),
-            ),
-
-            // Bottom Overlay Info
             Positioned(
               left: 16,
               right: 16,
-              bottom: 14,
+              bottom: 16,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  // Badges Row
-                  Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                        decoration: BoxDecoration(
-                          gradient: AppColors.neonPinkGradient,
-                          borderRadius: BorderRadius.circular(20),
-                          boxShadow: [
-                            BoxShadow(
-                              color: const Color(0xFFFF2E63).withValues(alpha: 0.4),
-                              blurRadius: 8,
-                              offset: const Offset(0, 2),
-                            ),
-                          ],
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Icon(Icons.local_fire_department_rounded, size: 12, color: Colors.white),
-                            const SizedBox(width: 3),
-                            Text(
-                              '#${index + 1} TRENDING',
-                              style: const TextStyle(
-                                fontSize: 9.5,
-                                fontWeight: FontWeight.w900,
-                                color: Colors.white,
-                                letterSpacing: 0.3,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      if (manga.rating > 0) ...[
-                        const SizedBox(width: 6),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-                          decoration: BoxDecoration(
-                            color: Colors.black.withValues(alpha: 0.7),
-                            borderRadius: BorderRadius.circular(20),
-                            border: Border.all(color: Colors.amber.withValues(alpha: 0.4), width: 0.5),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const Icon(Icons.star_rounded, color: Colors.amber, size: 13),
-                              const SizedBox(width: 2),
-                              Text(
-                                manga.rating.toStringAsFixed(1),
-                                style: const TextStyle(
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w800,
-                                  color: Colors.white,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                  const SizedBox(height: 6),
-
-                  // Title
                   Text(
                     manga.title,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w900,
+                      fontSize: 22,
+                      fontWeight: FontWeight.w800,
                       color: Colors.white,
-                      letterSpacing: -0.3,
+                      letterSpacing: -0.4,
+                      height: 1.15,
                     ),
                   ),
-                  const SizedBox(height: 2),
-
-                  // Genres
+                  const SizedBox(height: 3),
                   Text(
                     genresText,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
-                      fontSize: 11.5,
-                      color: AppColors.textMuted,
+                      fontSize: 12,
+                      color: AppColors.textSecondary,
                       fontWeight: FontWeight.w500,
                     ),
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      GlassTag(
+                        label: '#${index + 1} Trending',
+                        icon: Icons.local_fire_department_rounded,
+                        filled: true,
+                      ),
+                      if (manga.rating > 0) ...[
+                        const SizedBox(width: 6),
+                        GlassTag(
+                          label: manga.ratingCount >= 100
+                              ? '${manga.rating.toStringAsFixed(1)} · ${_compact(manga.ratingCount)}'
+                              : manga.rating.toStringAsFixed(1),
+                          icon: Icons.star_rounded,
+                          color: AppColors.amber,
+                        ),
+                      ],
+                    ],
                   ),
                 ],
               ),
@@ -222,5 +158,11 @@ class _HeroCarouselState extends State<HeroCarousel> {
         ),
       ),
     );
+  }
+
+  String _compact(int n) {
+    if (n >= 1000000) return '${(n / 1000000).toStringAsFixed(1)}M';
+    if (n >= 1000) return '${(n / 1000).toStringAsFixed(1)}K';
+    return '$n';
   }
 }

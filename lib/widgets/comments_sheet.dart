@@ -12,19 +12,34 @@ import 'liquid_glass_container.dart';
 class CommentsSheet extends StatefulWidget {
   final String path;
   final String title;
+  final String? mangaId;
+  final String? chapterId;
 
-  const CommentsSheet({super.key, required this.path, required this.title});
+  const CommentsSheet({
+    super.key,
+    required this.path,
+    required this.title,
+    this.mangaId,
+    this.chapterId,
+  });
 
   static void show(
     BuildContext context, {
     required String path,
     required String title,
+    String? mangaId,
+    String? chapterId,
   }) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => CommentsSheet(path: path, title: title),
+      builder: (_) => CommentsSheet(
+        path: path,
+        title: title,
+        mangaId: mangaId,
+        chapterId: chapterId,
+      ),
     );
   }
 
@@ -36,6 +51,7 @@ class _CommentsSheetState extends State<CommentsSheet> {
   final ShngmApiService _apiService = ShngmApiService();
   final TextEditingController _commentCtrl = TextEditingController();
   final ScrollController _scrollController = ScrollController();
+  final FocusNode _focusNode = FocusNode();
 
   List<WalineComment> _comments = [];
   bool _isLoading = true;
@@ -44,6 +60,7 @@ class _CommentsSheetState extends State<CommentsSheet> {
   int _totalPages = 1;
   int _totalCount = 0;
   bool _isLoadingMore = false;
+  WalineComment? _replyingToComment;
 
   @override
   void initState() {
@@ -55,7 +72,21 @@ class _CommentsSheetState extends State<CommentsSheet> {
   void dispose() {
     _commentCtrl.dispose();
     _scrollController.dispose();
+    _focusNode.dispose();
     super.dispose();
+  }
+
+  void _startReply(WalineComment comment) {
+    setState(() {
+      _replyingToComment = comment;
+    });
+    _focusNode.requestFocus();
+  }
+
+  void _cancelReply() {
+    setState(() {
+      _replyingToComment = null;
+    });
   }
 
   Future<void> _fetchComments({bool refresh = false}) async {
@@ -64,10 +95,14 @@ class _CommentsSheetState extends State<CommentsSheet> {
     }
     setState(() => _isLoading = _page == 1);
 
+    final authProvider = context.read<AuthProvider>();
     final res = await _apiService.fetchComments(
       widget.path,
       page: _page,
       pageSize: 20,
+      mangaId: widget.mangaId,
+      chapterId: widget.chapterId,
+      token: authProvider.token,
     );
 
     if (mounted) {
@@ -101,6 +136,8 @@ class _CommentsSheetState extends State<CommentsSheet> {
     final authProvider = context.read<AuthProvider>();
     final nick = authProvider.user?.username ?? 'Pembaca';
     final email = authProvider.user?.email ?? '';
+    final replyTarget = _replyingToComment;
+    final int? rid = replyTarget != null ? int.tryParse(replyTarget.id) : null;
 
     setState(() => _isSending = true);
 
@@ -109,28 +146,55 @@ class _CommentsSheetState extends State<CommentsSheet> {
       comment: text,
       nick: nick,
       mail: email,
+      mangaId: widget.mangaId,
+      chapterId: widget.chapterId,
+      rid: rid,
+      token: authProvider.token,
     );
 
     if (mounted) {
       setState(() => _isSending = false);
       if (success) {
         _commentCtrl.clear();
+        setState(() {
+          _replyingToComment = null;
+        });
+        FocusScope.of(context).unfocus();
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Komentar berhasil dikirim!'),
+          SnackBar(
+            content: Text(replyTarget != null ? 'Balasan berhasil dikirim!' : 'Komentar berhasil dikirim!'),
             backgroundColor: AppColors.primary,
-            duration: Duration(seconds: 2),
+            duration: const Duration(seconds: 2),
           ),
         );
         _fetchComments(refresh: true);
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Gagal mengirim komentar. Coba lagi.'),
-            backgroundColor: Colors.redAccent,
+          SnackBar(
+            content: Text(authProvider.token == null || authProvider.token!.isEmpty
+                ? 'Gagal mengirim. Silakan login akun terlebih dahulu.'
+                : 'Gagal mengirim balasan. Coba lagi.'),
+            backgroundColor: AppColors.danger,
           ),
         );
       }
+    }
+  }
+
+  Future<void> _voteComment(WalineComment comment) async {
+    final auth = context.read<AuthProvider>();
+    final success = await _apiService.voteComment(
+      comment.id,
+      up: true,
+      token: auth.token,
+    );
+    if (success && mounted) {
+      setState(() {
+        final idx = _comments.indexWhere((c) => c.id == comment.id);
+        if (idx != -1) {
+          _comments[idx] = _comments[idx].copyWith(like: _comments[idx].like + 1);
+        }
+      });
     }
   }
 
@@ -145,7 +209,7 @@ class _CommentsSheetState extends State<CommentsSheet> {
       child: LiquidGlassContainer(
         borderRadius: 24,
         blur: 24,
-        color: const Color(0xF00D111A),
+        color: const Color(0xF21F2339),
         border: Border.all(color: Colors.white.withValues(alpha: 0.18)),
         padding: EdgeInsets.zero,
         child: Column(
@@ -273,64 +337,116 @@ class _CommentsSheetState extends State<CommentsSheet> {
                 color: Colors.black.withValues(alpha: 0.4),
                 border: const Border(top: BorderSide(color: AppColors.border)),
               ),
-              child: Row(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  Expanded(
-                    child: Container(
-                      height: 42,
+                  if (_replyingToComment != null) ...[
+                    Container(
+                      margin: const EdgeInsets.only(bottom: 8),
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                       decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.08),
-                        borderRadius: BorderRadius.circular(22),
+                        color: AppColors.primary.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(10),
                         border: Border.all(
-                          color: Colors.white.withValues(alpha: 0.16),
+                          color: AppColors.primary.withValues(alpha: 0.35),
+                          width: 0.8,
                         ),
                       ),
-                      child: TextField(
-                        controller: _commentCtrl,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 13,
-                        ),
-                        decoration: const InputDecoration(
-                          hintText: 'Tulis komentar...',
-                          hintStyle: TextStyle(
-                            color: AppColors.textMuted,
-                            fontSize: 12.5,
+                      child: Row(
+                        children: [
+                          const Icon(
+                            Icons.reply_rounded,
+                            color: AppColors.primary,
+                            size: 14,
                           ),
-                          contentPadding: EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 10,
-                          ),
-                          border: InputBorder.none,
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Container(
-                    width: 42,
-                    height: 42,
-                    decoration: const BoxDecoration(
-                      shape: BoxShape.circle,
-                      gradient: AppColors.primaryGradient,
-                    ),
-                    child: IconButton(
-                      icon: _isSending
-                          ? const SizedBox(
-                              width: 16,
-                              height: 16,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: Colors.white,
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              'Membalas @${_replyingToComment!.nick}',
+                              style: const TextStyle(
+                                color: AppColors.primary,
+                                fontSize: 11.5,
+                                fontWeight: FontWeight.w700,
                               ),
-                            )
-                          : const Icon(
-                              Icons.send_rounded,
-                              color: Colors.white,
-                              size: 18,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                             ),
-                      onPressed: _isSending ? null : _submitComment,
+                          ),
+                          GestureDetector(
+                            onTap: _cancelReply,
+                            child: const Icon(
+                              Icons.close_rounded,
+                              color: Colors.white70,
+                              size: 14,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
+                  ],
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Container(
+                          height: 42,
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.08),
+                            borderRadius: BorderRadius.circular(22),
+                            border: Border.all(
+                              color: Colors.white.withValues(alpha: 0.16),
+                            ),
+                          ),
+                          child: TextField(
+                            controller: _commentCtrl,
+                            focusNode: _focusNode,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 13,
+                            ),
+                            decoration: InputDecoration(
+                              hintText: _replyingToComment != null
+                                  ? 'Balas @${_replyingToComment!.nick}...'
+                                  : 'Tulis komentar...',
+                              hintStyle: const TextStyle(
+                                color: AppColors.textMuted,
+                                fontSize: 12.5,
+                              ),
+                              contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 10,
+                              ),
+                              border: InputBorder.none,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Container(
+                        width: 42,
+                        height: 42,
+                        decoration: const BoxDecoration(
+                          shape: BoxShape.circle,
+                          gradient: AppColors.primaryGradient,
+                        ),
+                        child: IconButton(
+                          icon: _isSending
+                              ? const SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: Colors.white,
+                                  ),
+                                )
+                              : Icon(
+                                  _replyingToComment != null ? Icons.reply_rounded : Icons.send_rounded,
+                                  color: Colors.white,
+                                  size: 18,
+                                ),
+                          onPressed: _isSending ? null : _submitComment,
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
@@ -433,6 +549,81 @@ class _CommentsSheetState extends State<CommentsSheet> {
               ],
             ),
           ],
+
+          const SizedBox(height: 8),
+
+          // Actions: Like & Balas
+          Row(
+            children: [
+              GestureDetector(
+                onTap: () => _voteComment(comment),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: const Color(0x29E2288E),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: const Color(0xFFB5186E).withValues(alpha: 0.5),
+                      width: 0.8,
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(
+                        Icons.favorite_rounded,
+                        color: Color(0xFFFF6CB8),
+                        size: 11,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        '${comment.like}',
+                        style: const TextStyle(
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.w700,
+                          color: Color(0xFFFF6CB8),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(width: 6),
+              GestureDetector(
+                onTap: () => _startReply(comment),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.06),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: Colors.white.withValues(alpha: 0.12),
+                      width: 0.8,
+                    ),
+                  ),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.reply_rounded,
+                        color: Colors.white70,
+                        size: 11,
+                      ),
+                      SizedBox(width: 4),
+                      Text(
+                        'Balas',
+                        style: TextStyle(
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.white70,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
 
           // Nested Replies
           if (comment.replies.isNotEmpty) ...[

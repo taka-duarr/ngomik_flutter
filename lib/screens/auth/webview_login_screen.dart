@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:webview_flutter/webview_flutter.dart';
@@ -13,7 +14,7 @@ class WebViewLoginScreen extends StatefulWidget {
 
   const WebViewLoginScreen({
     super.key,
-    this.initialUrl = 'https://11.shinigami.asia/auth/supabase/login-user',
+    this.initialUrl = 'https://s1.shinigami.mx/',
   });
 
   @override
@@ -27,23 +28,85 @@ class _WebViewLoginScreenState extends State<WebViewLoginScreen> {
   bool _isProcessingToken = false;
   String? _detectedAccountName;
   String _currentUrl = '';
+  Timer? _pollTimer;
 
   static const String _tokenInterceptorScript = '''
 (function() {
-  function reportToken(raw, source) {
-    if (!raw || typeof raw !== 'string') return;
-    var matches = raw.match(/v4\\.public\\.[A-Za-z0-9_\\-]+/g);
-    if (matches && matches.length > 0) {
-      if (window.TokenChannel) {
-        window.TokenChannel.postMessage(JSON.stringify({
-          token: matches[0],
-          source: source || 'unknown'
-        }));
-      }
+  function sendToken(token, source, extraUser) {
+    if (!token || typeof token !== 'string') return;
+    var clean = token.replace(/^Bearer\\s+/i, '').trim();
+    if (clean.length < 20) return;
+    if (window.TokenChannel) {
+      window.TokenChannel.postMessage(JSON.stringify({
+        token: clean,
+        source: source || 'unknown',
+        user: extraUser || null
+      }));
     }
   }
 
-  // 1. Hook window.fetch
+  function inspectValue(val, source) {
+    if (!val) return;
+    if (typeof val !== 'string') {
+      try { val = JSON.stringify(val); } catch(e) { return; }
+    }
+
+    // 1. Check if it's JSON containing auth-storage or token
+    try {
+      if (val.indexOf('{') !== -1) {
+        var parsed = JSON.parse(val);
+        if (parsed) {
+          if (parsed.state && parsed.state.token) {
+            sendToken(parsed.state.token, source + ':parsed_state_token', parsed.state.user);
+            return;
+          }
+          if (parsed.token) {
+            sendToken(parsed.token, source + ':parsed_token', parsed.user);
+            return;
+          }
+          if (parsed.access_token) {
+            sendToken(parsed.access_token, source + ':parsed_access_token', parsed.user);
+            return;
+          }
+        }
+      }
+    } catch(e) {}
+
+    // 2. JWT (eyJ...)
+    var jwtMatch = val.match(/eyJ[A-Za-z0-9_\\-]+\\.[A-Za-z0-9_\\-]+\\.[A-Za-z0-9_\\-]+/);
+    if (jwtMatch) {
+      sendToken(jwtMatch[0], source + ':jwt');
+      return;
+    }
+
+    // 3. Paseto (v4.public....)
+    var pasetoMatch = val.match(/v4\\.public\\.[A-Za-z0-9_\\-]+/);
+    if (pasetoMatch) {
+      sendToken(pasetoMatch[0], source + ':paseto');
+      return;
+    }
+
+    // 4. Raw Bearer
+    var bearerMatch = val.match(/Bearer\\s+([A-Za-z0-9_\\-\\.]+)/i);
+    if (bearerMatch) {
+      sendToken(bearerMatch[1], source + ':bearer');
+      return;
+    }
+  }
+
+  // Hook localStorage.setItem
+  if (window.localStorage && !window.__shngm_storage_hooked) {
+    window.__shngm_storage_hooked = true;
+    var origSetItem = localStorage.setItem;
+    localStorage.setItem = function(key, val) {
+      try {
+        inspectValue(val, 'setItem:' + key);
+      } catch(e) {}
+      return origSetItem.apply(this, arguments);
+    };
+  }
+
+  // Hook window.fetch
   if (window.fetch && !window.__shngm_fetch_hooked) {
     window.__shngm_fetch_hooked = true;
     var originalFetch = window.fetch;
@@ -53,11 +116,13 @@ class _WebViewLoginScreenState extends State<WebViewLoginScreen> {
         var options = arguments[1] || {};
         var headers = options.headers || {};
         if (headers) {
+          var auth = null;
           if (typeof headers.get === 'function') {
-            reportToken(headers.get('authorization') || headers.get('Authorization'), 'fetch_hdr:' + url);
+            auth = headers.get('authorization') || headers.get('Authorization');
           } else if (typeof headers === 'object') {
-            reportToken(headers['Authorization'] || headers['authorization'] || headers['AUTHORIZATION'], 'fetch_hdr:' + url);
+            auth = headers['Authorization'] || headers['authorization'] || headers['AUTHORIZATION'];
           }
+          if (auth) inspectValue(auth, 'fetch_hdr:' + url);
         }
       } catch (e) {}
 
@@ -66,7 +131,7 @@ class _WebViewLoginScreenState extends State<WebViewLoginScreen> {
       try {
         var clone = response.clone();
         clone.text().then(function(text) {
-          reportToken(text, 'fetch_resp');
+          inspectValue(text, 'fetch_resp');
         }).catch(function() {});
       } catch (e) {}
 
@@ -74,7 +139,7 @@ class _WebViewLoginScreenState extends State<WebViewLoginScreen> {
     };
   }
 
-  // 2. Hook XMLHttpRequest
+  // Hook XMLHttpRequest
   if (window.XMLHttpRequest && !window.__shngm_xhr_hooked) {
     window.__shngm_xhr_hooked = true;
     var origOpen = XMLHttpRequest.prototype.open;
@@ -82,7 +147,7 @@ class _WebViewLoginScreenState extends State<WebViewLoginScreen> {
 
     XMLHttpRequest.prototype.setRequestHeader = function(header, value) {
       if (header && header.toLowerCase() === 'authorization') {
-        reportToken(value, 'xhr_hdr');
+        inspectValue(value, 'xhr_hdr');
       }
       return origSetHeader.apply(this, arguments);
     };
@@ -91,7 +156,7 @@ class _WebViewLoginScreenState extends State<WebViewLoginScreen> {
       this.addEventListener('load', function() {
         try {
           if (this.responseText) {
-            reportToken(this.responseText, 'xhr_resp');
+            inspectValue(this.responseText, 'xhr_resp');
           }
         } catch(e) {}
       });
@@ -99,29 +164,36 @@ class _WebViewLoginScreenState extends State<WebViewLoginScreen> {
     };
   }
 
-  // 3. Scan storage & cookies once per page load
-  try {
-    if (window.localStorage) {
-      for (var i = 0; i < localStorage.length; i++) {
-        var k = localStorage.key(i);
-        var v = localStorage.getItem(k);
-        reportToken(v, 'localStorage:' + k);
+  // Active scan inside JavaScript
+  function runScan() {
+    try {
+      if (window.localStorage) {
+        var as = localStorage.getItem('auth-storage');
+        if (as) inspectValue(as, 'scan:auth-storage');
+        var wat = localStorage.getItem('workos:access-token');
+        if (wat) inspectValue(wat, 'scan:workos:access-token');
+
+        for (var i = 0; i < localStorage.length; i++) {
+          var k = localStorage.key(i);
+          inspectValue(localStorage.getItem(k), 'scan:localStorage:' + k);
+        }
       }
-    }
-    if (window.sessionStorage) {
-      for (var j = 0; j < sessionStorage.length; j++) {
-        var sk = sessionStorage.key(j);
-        var sv = sessionStorage.getItem(sk);
-        reportToken(sv, 'sessionStorage:' + sk);
+      if (window.sessionStorage) {
+        for (var j = 0; j < sessionStorage.length; j++) {
+          var sk = sessionStorage.key(j);
+          inspectValue(sessionStorage.getItem(sk), 'scan:sessionStorage:' + sk);
+        }
       }
-    }
-    if (document.cookie) {
-      reportToken(document.cookie, 'cookie');
-    }
-    if (window.__NUXT__) {
-      reportToken(JSON.stringify(window.__NUXT__), 'nuxt_state');
-    }
-  } catch(e) {}
+      if (document.cookie) {
+        inspectValue(document.cookie, 'scan:cookie');
+      }
+    } catch(e) {}
+  }
+
+  runScan();
+  if (!window.__shngm_scan_interval) {
+    window.__shngm_scan_interval = setInterval(runScan, 1500);
+  }
 })();
 ''';
 
@@ -130,6 +202,20 @@ class _WebViewLoginScreenState extends State<WebViewLoginScreen> {
     super.initState();
     _currentUrl = widget.initialUrl;
     _initWebView();
+    _startPolling();
+  }
+
+  void _startPolling() {
+    _pollTimer = Timer.periodic(const Duration(milliseconds: 1500), (timer) {
+      if (!mounted || _isProcessingToken) return;
+      _scanForTokens();
+    });
+  }
+
+  @override
+  void dispose() {
+    _pollTimer?.cancel();
+    super.dispose();
   }
 
   void _initWebView() {
@@ -201,30 +287,64 @@ class _WebViewLoginScreenState extends State<WebViewLoginScreen> {
   }
 
   Future<void> _scanForTokens() async {
+    if (_isProcessingToken || !mounted) return;
     try {
       final result = await _webViewController.runJavaScriptReturningResult('''
 (function() {
   try {
-    var raw = '';
-    for (var i = 0; i < localStorage.length; i++) {
-      raw += ' ' + localStorage.getItem(localStorage.key(i));
+    // 1. Direct check auth-storage
+    var authStorage = localStorage.getItem('auth-storage');
+    if (authStorage) {
+      try {
+        var parsed = JSON.parse(authStorage);
+        if (parsed && parsed.state && parsed.state.token) {
+          return JSON.stringify({
+            token: parsed.state.token,
+            user: parsed.state.user || null
+          });
+        }
+      } catch(e) {}
     }
-    for (var j = 0; j < sessionStorage.length; j++) {
-      raw += ' ' + sessionStorage.getItem(sessionStorage.key(j));
-    }
-    raw += ' ' + document.cookie;
-    if (window.__NUXT__) raw += ' ' + JSON.stringify(window.__NUXT__);
 
-    var match = raw.match(/v4\\.public\\.[A-Za-z0-9_\\-]+/);
-    return match ? match[0] : '';
+    // 2. Direct check workos:access-token
+    var workosToken = localStorage.getItem('workos:access-token');
+    if (workosToken && workosToken.length > 20) {
+      var workosUser = null;
+      try {
+        workosUser = JSON.parse(localStorage.getItem('workos:user') || 'null');
+      } catch(e) {}
+      return JSON.stringify({
+        token: workosToken,
+        user: workosUser
+      });
+    }
+
+    // 3. Scan localStorage for JWT or Paseto
+    for (var i = 0; i < localStorage.length; i++) {
+      var val = localStorage.getItem(localStorage.key(i)) || '';
+      var jwt = val.match(/eyJ[A-Za-z0-9_\\-]+\\.[A-Za-z0-9_\\-]+\\.[A-Za-z0-9_\\-]+/);
+      if (jwt) return JSON.stringify({ token: jwt[0] });
+      var paseto = val.match(/v4\\.public\\.[A-Za-z0-9_\\-]+/);
+      if (paseto) return JSON.stringify({ token: paseto[0] });
+    }
+
+    // 4. Scan cookies
+    if (document.cookie) {
+      var cJwt = document.cookie.match(/eyJ[A-Za-z0-9_\\-]+\\.[A-Za-z0-9_\\-]+\\.[A-Za-z0-9_\\-]+/);
+      if (cJwt) return JSON.stringify({ token: cJwt[0] });
+      var cPaseto = document.cookie.match(/v4\\.public\\.[A-Za-z0-9_\\-]+/);
+      if (cPaseto) return JSON.stringify({ token: cPaseto[0] });
+    }
+
+    return '';
   } catch(e) {
     return '';
   }
 })();
 ''');
-      final tokenStr = result.toString().replaceAll('"', '').trim();
-      if (tokenStr.startsWith('v4.public.')) {
-        _onTokenCaptured(tokenStr);
+      final str = result.toString().trim();
+      if (str.isNotEmpty && str != '""' && str != 'null') {
+        _onTokenCaptured(str);
       }
     } catch (e) {
       debugPrint('Error scanning tokens: $e');
@@ -245,26 +365,57 @@ class _WebViewLoginScreenState extends State<WebViewLoginScreen> {
     if (_isProcessingToken || !mounted) return;
 
     String rawToken = payload;
-    if (payload.contains('token')) {
-      final tokenMatch = RegExp(r'v4\.public\.[A-Za-z0-9_\-]+').firstMatch(payload);
-      if (tokenMatch != null) {
-        rawToken = tokenMatch.group(0)!;
+    Map<String, dynamic>? userData;
+
+    // Check if payload is JSON
+    try {
+      String cleanStr = payload;
+      if (cleanStr.startsWith('"') && cleanStr.endsWith('"')) {
+        cleanStr = jsonDecode(cleanStr) as String;
       }
+
+      if (cleanStr.trim().startsWith('{') && cleanStr.trim().endsWith('}')) {
+        final map = jsonDecode(cleanStr);
+        if (map is Map) {
+          if (map['token'] != null) {
+            rawToken = map['token'].toString();
+          }
+          if (map['user'] is Map) {
+            userData = Map<String, dynamic>.from(map['user'] as Map);
+          }
+        }
+      }
+    } catch (_) {}
+
+    // Fallback regex if rawToken still contains JSON or Bearer
+    final jwtMatch = RegExp(r'eyJ[A-Za-z0-9_\-]+\.[A-Za-z0-9_\-]+\.[A-Za-z0-9_\-]+').firstMatch(rawToken);
+    final pasetoMatch = RegExp(r'v4\.public\.[A-Za-z0-9_\-]+').firstMatch(rawToken);
+
+    if (jwtMatch != null) {
+      rawToken = jwtMatch.group(0)!;
+    } else if (pasetoMatch != null) {
+      rawToken = pasetoMatch.group(0)!;
     }
 
     final clean = ClipboardHelper.cleanToken(rawToken);
-    if (!clean.startsWith('v4.public.')) return;
+    if (clean.length < 20) return;
 
     setState(() {
       _isProcessingToken = true;
     });
 
     final authProvider = context.read<AuthProvider>();
-    final success = await authProvider.loginWithToken(clean);
+    bool success = await authProvider.loginWithToken(clean);
+
+    // If API call fails but we have userData from auth-storage, create session directly
+    if (!success && userData != null) {
+      success = await authProvider.loginWithUserData(clean, userData);
+    }
 
     if (!mounted) return;
 
     if (success) {
+      _pollTimer?.cancel();
       final userName = authProvider.user?.username ?? 'Pembaca';
       setState(() => _detectedAccountName = userName);
 
@@ -325,17 +476,17 @@ class _WebViewLoginScreenState extends State<WebViewLoginScreen> {
         actions: [
           TextButton.icon(
             onPressed: _isProcessingToken ? null : _manualScanNow,
-            icon: const Icon(Icons.sync_rounded, size: 16, color: AppColors.cyan),
+            icon: const Icon(Icons.sync_rounded, size: 16, color: AppColors.accent),
             label: const Text(
               'Hubungkan',
               style: TextStyle(
                 fontSize: 12.5,
                 fontWeight: FontWeight.w800,
-                color: AppColors.cyan,
+                color: AppColors.accent,
               ),
             ),
             style: TextButton.styleFrom(
-              backgroundColor: AppColors.cyan.withValues(alpha: 0.15),
+              backgroundColor: AppColors.accent.withValues(alpha: 0.15),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
             ),
@@ -345,7 +496,7 @@ class _WebViewLoginScreenState extends State<WebViewLoginScreen> {
             tooltip: 'Ke Beranda',
             icon: const Icon(Icons.home_outlined),
             onPressed: () {
-              _webViewController.loadRequest(Uri.parse('https://11.shinigami.asia/'));
+              _webViewController.loadRequest(Uri.parse('https://s1.shinigami.mx/'));
             },
           ),
           IconButton(
@@ -356,72 +507,101 @@ class _WebViewLoginScreenState extends State<WebViewLoginScreen> {
             },
           ),
         ],
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(3.0),
-          child: _isLoading
-              ? LinearProgressIndicator(
+        bottom: _isLoading
+            ? PreferredSize(
+                preferredSize: const Size.fromHeight(2.5),
+                child: LinearProgressIndicator(
                   value: _progress > 0 ? _progress : null,
                   backgroundColor: AppColors.surface,
                   valueColor: const AlwaysStoppedAnimation<Color>(AppColors.primary),
-                  minHeight: 3.0,
-                )
-              : const SizedBox(height: 3.0),
-        ),
+                  minHeight: 2.5,
+                ),
+              )
+            : null,
       ),
       body: Stack(
         children: [
           WebViewWidget(controller: _webViewController),
+
+          // Processing Overlay
           if (_isProcessingToken)
             Container(
-              color: Colors.black.withValues(alpha: 0.8),
+              color: Colors.black.withValues(alpha: 0.85),
               child: Center(
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 24),
-                  decoration: BoxDecoration(
-                    color: AppColors.card,
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: AppColors.primary.withValues(alpha: 0.5)),
-                    boxShadow: [
-                      BoxShadow(
-                        color: AppColors.primary.withValues(alpha: 0.25),
-                        blurRadius: 30,
-                        offset: const Offset(0, 10),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: AppColors.surface,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: AppColors.border),
                       ),
-                    ],
-                  ),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const SizedBox(
-                        width: 44,
-                        height: 44,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 3.5,
-                          valueColor: AlwaysStoppedAnimation<Color>(AppColors.cyan),
-                        ),
+                      child: const CircularProgressIndicator(
+                        valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary),
+                        strokeWidth: 3,
                       ),
-                      const SizedBox(height: 18),
-                      const Text(
-                        '✨ Token Berhasil Terdeteksi!',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w800,
-                          color: Colors.white,
-                        ),
+                    ),
+                    const SizedBox(height: 18),
+                    Text(
+                      _detectedAccountName != null
+                          ? 'Menghubungkan akun $_detectedAccountName...'
+                          : 'Sesi login terdeteksi! Memverifikasi token...',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 14.5,
                       ),
-                      const SizedBox(height: 6),
-                      Text(
-                        _detectedAccountName != null
-                            ? 'Menghubungkan akun $_detectedAccountName...'
-                            : 'Memverifikasi sesi & menyinkronkan data...',
-                        style: const TextStyle(
-                          fontSize: 12.5,
-                          color: AppColors.textSecondary,
-                        ),
-                        textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 6),
+                    const Text(
+                      'Menyinkronkan bookmark & riwayat baca...',
+                      style: TextStyle(
+                        color: AppColors.textMuted,
+                        fontSize: 12,
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+          // Floating helper hint banner
+          if (!_isProcessingToken)
+            Positioned(
+              left: 16,
+              right: 16,
+              bottom: 16,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                decoration: BoxDecoration(
+                  color: AppColors.card.withValues(alpha: 0.95),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: AppColors.border),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.4),
+                      blurRadius: 10,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.info_outline_rounded, color: AppColors.primary, size: 20),
+                    const SizedBox(width: 10),
+                    const Expanded(
+                      child: Text(
+                        'Silakan login di halaman web. Sesi & token akun kamu akan otomatis terhubung.',
+                        style: TextStyle(fontSize: 11.5, color: AppColors.textSecondary),
+                      ),
+                    ),
+                    TextButton(
+                      onPressed: _manualScanNow,
+                      child: const Text('Hubungkan', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                    ),
+                  ],
                 ),
               ),
             ),

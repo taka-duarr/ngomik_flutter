@@ -24,12 +24,12 @@ class GoogleDotsLoading extends StatefulWidget {
     Color(0xFF4285F4), // Google Blue
   ];
 
-  // Preset Neon colors matching the app theme
+  // App palette: magenta → pink → lavender → mist
   static const List<Color> neonColors = [
-    Color(0xFFFF0055), // Ultra-Vivid Neon Crimson Red
-    Color(0xFFFFB800), // Neon Gold
-    Color(0xFF00E676), // Neon Emerald
-    Color(0xFF00E5FF), // Neon Electric Cyan
+    Color(0xFFE2288E),
+    Color(0xFFFF6CB8),
+    Color(0xFFB7A9FF),
+    Color(0xFFC9CCE2),
   ];
 
   @override
@@ -57,7 +57,7 @@ class _GoogleDotsLoadingState extends State<GoogleDotsLoading>
 
   @override
   Widget build(BuildContext context) {
-    final colors = widget.colors ?? GoogleDotsLoading.googleColors;
+    final colors = widget.colors ?? GoogleDotsLoading.neonColors;
 
     return AnimatedBuilder(
       animation: _controller,

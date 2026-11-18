@@ -169,6 +169,44 @@ class AuthProvider with ChangeNotifier {
     }
   }
 
+  /// Login with token and pre-loaded user data (e.g. from web auth-storage)
+  Future<bool> loginWithUserData(String inputToken, Map<String, dynamic> userMap) async {
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+
+    try {
+      final clean = ClipboardHelper.cleanToken(inputToken);
+      final userId = (userMap['id'] ?? userMap['user_id'] ?? '').toString();
+      final username = (userMap['name'] ?? userMap['username'] ?? userMap['email'] ?? 'Pembaca').toString();
+      final email = userMap['email']?.toString();
+      final avatar = userMap['avatar']?.toString() ?? userMap['avatar_image_url']?.toString();
+
+      _user = User(
+        userId: userId,
+        username: username,
+        email: email,
+        avatarImageUrl: avatar,
+        token: clean,
+      );
+      _token = clean;
+      _refreshToken = null;
+      _tokenExpiresAt = null;
+
+      await _storageService.saveToken(clean);
+      await _storageService.saveUser(_user!);
+      _isLoading = false;
+      notifyListeners();
+      return true;
+    } catch (e) {
+      debugPrint('loginWithUserData error: $e');
+      _errorMessage = 'Gagal memproses data akun: $e';
+      _isLoading = false;
+      notifyListeners();
+      return false;
+    }
+  }
+
   Future<void> refreshProfile() async {
     if (_token == null || _token!.isEmpty) return;
     try {
