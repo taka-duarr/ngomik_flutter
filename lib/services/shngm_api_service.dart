@@ -25,13 +25,13 @@ class ShngmApiService {
     String? q,
   }) async {
     try {
+      // The API pages with limit/offset now; page/page_size are ignored and
+      // every request used to return the same first 12 titles.
+      final limit = pageSize ?? 12;
       final queryParams = <String, String>{
-        'page': page.toString(),
+        'limit': limit.toString(),
+        'offset': ((page < 1 ? 0 : page - 1) * limit).toString(),
       };
-
-      if (pageSize != null) {
-        queryParams['page_size'] = pageSize.toString();
-      }
       if (sort != null && sort.isNotEmpty) {
         queryParams['sort'] = sort;
       }

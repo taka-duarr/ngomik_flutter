@@ -94,6 +94,13 @@ class MangaProvider with ChangeNotifier {
     }
   }
 
+  /// Appends titles not already in [into]. Rankings can shift between two
+  /// requests, so a page boundary may repeat an item; never show it twice.
+  static void _appendUnique(List<Manga> into, List<Manga> more) {
+    final known = into.map((m) => m.id).toSet();
+    into.addAll(more.where((m) => known.add(m.id)));
+  }
+
   Future<void> loadMorePopular() async {
     if (_isLoadingMorePopular || !_hasMorePopular || _isLoadingHome) return;
     _isLoadingMorePopular = true;
@@ -107,7 +114,7 @@ class MangaProvider with ChangeNotifier {
         _hasMorePopular = false;
       } else {
         _popularPage = nextPage;
-        _popularManga.addAll(results);
+        _appendUnique(_popularManga, results);
         _hasMorePopular = results.isNotEmpty;
       }
     } catch (e) {
@@ -198,7 +205,7 @@ class MangaProvider with ChangeNotifier {
         _hasMoreFiltered = false;
       } else {
         _filteredPage = nextPage;
-        _filteredManga.addAll(results);
+        _appendUnique(_filteredManga, results);
         _hasMoreFiltered = results.isNotEmpty;
       }
     } catch (e) {
@@ -279,7 +286,7 @@ class MangaProvider with ChangeNotifier {
         _hasMoreSearch = false;
       } else {
         _searchPage = nextPage;
-        _searchResults.addAll(results);
+        _appendUnique(_searchResults, results);
         _hasMoreSearch = results.isNotEmpty;
       }
     } catch (e) {
