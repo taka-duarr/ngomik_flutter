@@ -24,10 +24,20 @@ class AuthProvider with ChangeNotifier {
 
   /// True if the access_token is expired or will expire within 5 minutes
   bool get isTokenExpired {
-    if (_token == null) return true;
-    if (_tokenExpiresAt == null) return false;
+    if (_token == null || _token!.isEmpty) return true;
+
+    int? exp = _tokenExpiresAt;
+    if (exp == null) {
+      exp = ClipboardHelper.getJwtExpiration(_token!);
+      if (exp != null) {
+        _tokenExpiresAt = exp;
+        _storageService.saveTokenExpiresAt(exp);
+      }
+    }
+
+    if (exp == null) return false;
     final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
-    return now >= (_tokenExpiresAt! - 300); // 5-min buffer
+    return now >= (exp - 300); // 5-minute buffer before expiry
   }
 
   /// True if user has a valid refresh token (session can be extended)
@@ -39,14 +49,196 @@ class AuthProvider with ChangeNotifier {
     _refreshToken = await _storageService.getRefreshToken();
     _tokenExpiresAt = await _storageService.getTokenExpiresAt();
     _user = await _storageService.getUser();
-    notifyListeners();
 
-    // Try to refresh profile if token looks still valid (best-effort)
-    if (_token != null && _token!.isNotEmpty && !isTokenExpired) {
+    // Auto-extract exp from token if missing in storage
+    if (_token != null && _tokenExpiresAt == null) {
+      final exp = ClipboardHelper.getJwtExpiration(_token!);
+      if (exp != null) {
+        _tokenExpiresAt = exp;
+        await _storageService.saveTokenExpiresAt(exp);
+      }
+    }
+
+    // Auto-refresh expired token using refresh token on startup
+    if (isTokenExpired && hasRefreshToken) {
+      debugPrint('Stored access token expired on startup, refreshing silently...');
+      await refreshTokenSilently();
+    } else if (_token != null && _token!.isNotEmpty && !isTokenExpired) {
       await refreshProfile();
     }
-    // If token expired but we have user data, keep showing cached profile
-    // (no force-logout)
+
+    notifyListeners();
+  }
+
+  /// Returns a valid, active access token.
+  /// Automatically refreshes silently if expired or expiring soon.
+  Future<String?> getValidToken() async {
+    if (_token == null || _token!.isEmpty) return null;
+
+    if (isTokenExpired && hasRefreshToken) {
+      debugPrint('Access token is expired or near expiry, refreshing...');
+      final success = await refreshTokenSilently();
+      if (success) {
+        return _token;
+      }
+    }
+    return _token;
+  }
+
+  /// Silently refresh the token using WorkOS refresh token
+  Future<bool> refreshTokenSilently() async {
+    if (_refreshToken == null || _refreshToken!.isEmpty) {
+      _refreshToken = await _storageService.getRefreshToken();
+    }
+
+    if (_refreshToken != null && _refreshToken!.isNotEmpty) {
+      try {
+        debugPrint('Attempting silent token refresh via WorkOS API...');
+        final res = await _apiService.refreshWorkosToken(_refreshToken!);
+        if (res != null) {
+          final newAccess = res['access_token']?.toString();
+          final newRefresh = res['refresh_token']?.toString() ?? _refreshToken;
+          if (newAccess != null && newAccess.isNotEmpty) {
+            final exp = ClipboardHelper.getJwtExpiration(newAccess);
+            _token = newAccess;
+            _refreshToken = newRefresh;
+            _tokenExpiresAt = exp;
+
+            await _storageService.saveToken(newAccess);
+            if (newRefresh != null) await _storageService.saveRefreshToken(newRefresh);
+            if (exp != null) await _storageService.saveTokenExpiresAt(exp);
+
+            if (_user != null) {
+              _user = _user!.copyWith(token: newAccess);
+              await _storageService.saveUser(_user!);
+            }
+
+            debugPrint('WorkOS token refreshed successfully! Expires at: $exp');
+            notifyListeners();
+            return true;
+          }
+        }
+      } catch (e) {
+        debugPrint('refreshTokenSilently error: $e');
+      }
+    }
+
+    return false;
+  }
+
+  /// Comprehensive session saver for WorkOS & Shinigami
+  Future<bool> saveSession({
+    required String accessToken,
+    String? refreshToken,
+    int? expiresAt,
+    Map<String, dynamic>? userMap,
+  }) async {
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+
+    try {
+      final clean = ClipboardHelper.cleanToken(accessToken);
+      int? exp = expiresAt;
+      if (exp == null || exp <= 0) {
+        exp = ClipboardHelper.getJwtExpiration(clean);
+      }
+
+      // Assign tokens to instance variables first so onTokenRefresh can work if needed
+      _token = clean;
+      _refreshToken = refreshToken;
+      _tokenExpiresAt = exp;
+
+      User? profile;
+      try {
+        profile = await _apiService.fetchUserProfile(clean);
+      } catch (_) {}
+
+      final nowSec = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+      final isExpired = exp != null && exp < nowSec;
+
+      // If token expired, profile failed, and no refresh token, fail gracefully
+      if (profile == null && userMap == null && isExpired && (refreshToken == null || refreshToken.isEmpty)) {
+        _token = null;
+        _refreshToken = null;
+        _tokenExpiresAt = null;
+        _errorMessage = 'Sesi telah kedaluwarsa. Silakan login kembali.';
+        _isLoading = false;
+        notifyListeners();
+        return false;
+      }
+
+      if (profile != null) {
+        _user = profile.copyWith(token: clean);
+      } else if (userMap != null) {
+        final userId = (userMap['id'] ?? userMap['user_id'] ?? '').toString();
+        final username = (userMap['name'] ?? userMap['first_name'] ?? userMap['username'] ?? userMap['email'] ?? 'Pembaca').toString();
+        final email = userMap['email']?.toString();
+        final avatar = userMap['avatar']?.toString() ?? userMap['avatar_image_url']?.toString();
+        _user = User(
+          userId: userId,
+          username: username,
+          email: email,
+          avatarImageUrl: avatar,
+          token: clean,
+        );
+      } else if (_user != null) {
+        _user = _user!.copyWith(token: clean);
+      } else {
+        _user = User(
+          userId: 'user',
+          username: 'Pembaca',
+          token: clean,
+        );
+      }
+
+      _token = clean;
+      _refreshToken = refreshToken;
+      _tokenExpiresAt = exp;
+
+      await _storageService.saveToken(clean);
+      await _storageService.saveUser(_user!);
+      if (refreshToken != null && refreshToken.isNotEmpty) {
+        await _storageService.saveRefreshToken(refreshToken);
+      }
+      if (exp != null) {
+        await _storageService.saveTokenExpiresAt(exp);
+      }
+
+      _isLoading = false;
+      notifyListeners();
+      return true;
+    } catch (e) {
+      debugPrint('saveSession error: $e');
+      _errorMessage = 'Gagal menyimpan sesi: $e';
+      _isLoading = false;
+      notifyListeners();
+      return false;
+    }
+  }
+
+  /// Login with Bearer token
+  Future<bool> loginWithToken(String inputToken, {String? refreshToken, int? expiresAt}) async {
+    return saveSession(
+      accessToken: inputToken,
+      refreshToken: refreshToken,
+      expiresAt: expiresAt,
+    );
+  }
+
+  /// Login with token and pre-loaded user data (e.g. from web auth-storage)
+  Future<bool> loginWithUserData(
+    String inputToken,
+    Map<String, dynamic> userMap, {
+    String? refreshToken,
+    int? expiresAt,
+  }) async {
+    return saveSession(
+      accessToken: inputToken,
+      userMap: userMap,
+      refreshToken: refreshToken,
+      expiresAt: expiresAt,
+    );
   }
 
   /// Login using a Supabase session cookie (lasts ~60 days)
@@ -129,78 +321,6 @@ class AuthProvider with ChangeNotifier {
     } catch (e) {
       debugPrint('loginWithSupabaseCookie error: $e');
       _errorMessage = 'Gagal memproses cookie: $e';
-      _isLoading = false;
-      notifyListeners();
-      return false;
-    }
-  }
-
-  /// Legacy login with Bearer token (still supported)
-  Future<bool> loginWithToken(String inputToken) async {
-    _isLoading = true;
-    _errorMessage = null;
-    notifyListeners();
-
-    try {
-      final clean = ClipboardHelper.cleanToken(inputToken);
-      final profile = await _apiService.fetchUserProfile(clean);
-
-      if (profile != null) {
-        _user = profile.copyWith(token: clean);
-        _token = clean;
-        _refreshToken = null;
-        _tokenExpiresAt = null;
-        await _storageService.saveToken(clean);
-        await _storageService.saveUser(_user!);
-        _isLoading = false;
-        notifyListeners();
-        return true;
-      } else {
-        _errorMessage = 'Token tidak valid atau sudah kedaluwarsa.';
-        _isLoading = false;
-        notifyListeners();
-        return false;
-      }
-    } catch (e) {
-      _errorMessage = 'Gagal memverifikasi akun.';
-      _isLoading = false;
-      notifyListeners();
-      return false;
-    }
-  }
-
-  /// Login with token and pre-loaded user data (e.g. from web auth-storage)
-  Future<bool> loginWithUserData(String inputToken, Map<String, dynamic> userMap) async {
-    _isLoading = true;
-    _errorMessage = null;
-    notifyListeners();
-
-    try {
-      final clean = ClipboardHelper.cleanToken(inputToken);
-      final userId = (userMap['id'] ?? userMap['user_id'] ?? '').toString();
-      final username = (userMap['name'] ?? userMap['username'] ?? userMap['email'] ?? 'Pembaca').toString();
-      final email = userMap['email']?.toString();
-      final avatar = userMap['avatar']?.toString() ?? userMap['avatar_image_url']?.toString();
-
-      _user = User(
-        userId: userId,
-        username: username,
-        email: email,
-        avatarImageUrl: avatar,
-        token: clean,
-      );
-      _token = clean;
-      _refreshToken = null;
-      _tokenExpiresAt = null;
-
-      await _storageService.saveToken(clean);
-      await _storageService.saveUser(_user!);
-      _isLoading = false;
-      notifyListeners();
-      return true;
-    } catch (e) {
-      debugPrint('loginWithUserData error: $e');
-      _errorMessage = 'Gagal memproses data akun: $e';
       _isLoading = false;
       notifyListeners();
       return false;

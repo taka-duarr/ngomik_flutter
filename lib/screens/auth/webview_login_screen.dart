@@ -32,17 +32,95 @@ class _WebViewLoginScreenState extends State<WebViewLoginScreen> {
 
   static const String _tokenInterceptorScript = '''
 (function() {
-  function sendToken(token, source, extraUser) {
+  function sendToken(token, source, extraUser, refreshToken, expiresAt) {
     if (!token || typeof token !== 'string') return;
     var clean = token.replace(/^Bearer\\s+/i, '').trim();
     if (clean.length < 20) return;
     if (window.TokenChannel) {
       window.TokenChannel.postMessage(JSON.stringify({
         token: clean,
+        refreshToken: refreshToken || null,
+        expiresAt: expiresAt || null,
         source: source || 'unknown',
         user: extraUser || null
       }));
     }
+  }
+
+  var isCheckingWorkos = false;
+  var lastWorkosCheck = 0;
+  function tryWorkosCookieAuth() {
+    var now = Date.now();
+    if (isCheckingWorkos || (now - lastWorkosCheck < 2500)) return;
+    if (!document.cookie || document.cookie.indexOf('workos-has-session') === -1) return;
+    isCheckingWorkos = true;
+    lastWorkosCheck = now;
+
+    fetch('https://api.workos.com/user_management/authenticate', {
+      method: 'POST',
+      credentials: 'include',
+      headers: {
+        'Accept': 'application/json, text/plain, */*',
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        client_id: 'client_01KJWQWJ8M8WAKN8ZDWVVJ4BG1',
+        grant_type: 'refresh_token'
+      })
+    }).then(function(res) {
+      if (res.ok) return res.json();
+      return null;
+    }).then(function(data) {
+      isCheckingWorkos = false;
+      if (data) {
+        var tok = data.access_token || data.accessToken || data.token;
+        var rf = data.refresh_token || data.refreshToken;
+        var exp = data.expires_at || data.expiresAt;
+        var usr = data.user || null;
+        if (tok && typeof tok === 'string' && tok.length > 20) {
+          sendToken(tok, 'workos:cookie_auth', usr, rf, exp);
+        }
+      }
+    }).catch(function() {
+      isCheckingWorkos = false;
+    });
+  }
+  window.__tryWorkosCookieAuth = tryWorkosCookieAuth;
+
+  function checkWorkosStorage() {
+    try {
+      if (!window.localStorage) return false;
+      var wat = localStorage.getItem('workos:access-token');
+      var wrt = localStorage.getItem('workos:refresh-token');
+      var wexp = localStorage.getItem('workos:expires-at');
+      var wu = localStorage.getItem('workos:user');
+      var uObj = null;
+      if (wu) {
+        try { uObj = JSON.parse(wu); } catch(e) {}
+      }
+
+      if (wat && wat.length > 20) {
+        sendToken(wat, 'workos:storage', uObj, wrt, wexp);
+        return true;
+      }
+
+      var as = localStorage.getItem('auth-storage');
+      if (as) {
+        var parsed = JSON.parse(as);
+        if (parsed && parsed.state) {
+          var s = parsed.state;
+          var tok = s.token || (s.session ? (s.session.accessToken || s.session.access_token) : null);
+          var rf = (s.session ? (s.session.refreshToken || s.session.refresh_token) : null) || wrt;
+          var exp = (s.session ? (s.session.expiresAt || s.session.expires_at) : null) || wexp;
+          var usr = s.user || uObj;
+          if (tok && tok.length > 20) {
+            sendToken(tok, 'auth-storage:state', usr, rf, exp);
+            return true;
+          }
+        }
+      }
+    } catch(e) {}
+    return false;
   }
 
   function inspectValue(val, source) {
@@ -57,15 +135,20 @@ class _WebViewLoginScreenState extends State<WebViewLoginScreen> {
         var parsed = JSON.parse(val);
         if (parsed) {
           if (parsed.state && parsed.state.token) {
-            sendToken(parsed.state.token, source + ':parsed_state_token', parsed.state.user);
+            var rf = (parsed.state.session ? (parsed.state.session.refreshToken || parsed.state.session.refresh_token) : null);
+            var exp = (parsed.state.session ? (parsed.state.session.expiresAt || parsed.state.session.expires_at) : null);
+            sendToken(parsed.state.token, source + ':parsed_state_token', parsed.state.user, rf, exp);
             return;
           }
-          if (parsed.token) {
-            sendToken(parsed.token, source + ':parsed_token', parsed.user);
-            return;
-          }
-          if (parsed.access_token) {
-            sendToken(parsed.access_token, source + ':parsed_access_token', parsed.user);
+          var tok = parsed.accessToken || parsed.access_token || parsed.token ||
+                    (parsed.data && (parsed.data.accessToken || parsed.data.access_token || parsed.data.token));
+          var rf = parsed.refreshToken || parsed.refresh_token ||
+                   (parsed.data && (parsed.data.refreshToken || parsed.data.refresh_token));
+          var exp = parsed.expiresAt || parsed.expires_at ||
+                    (parsed.data && (parsed.data.expiresAt || parsed.data.expires_at));
+          var usr = parsed.user || (parsed.data && parsed.data.user);
+          if (tok && typeof tok === 'string' && tok.length > 20) {
+            sendToken(tok, source + ':parsed_token', usr, rf, exp);
             return;
           }
         }
@@ -101,6 +184,9 @@ class _WebViewLoginScreenState extends State<WebViewLoginScreen> {
     localStorage.setItem = function(key, val) {
       try {
         inspectValue(val, 'setItem:' + key);
+        if (key.indexOf('workos') !== -1 || key === 'auth-storage') {
+          checkWorkosStorage();
+        }
       } catch(e) {}
       return origSetItem.apply(this, arguments);
     };
@@ -132,6 +218,8 @@ class _WebViewLoginScreenState extends State<WebViewLoginScreen> {
         var clone = response.clone();
         clone.text().then(function(text) {
           inspectValue(text, 'fetch_resp');
+          checkWorkosStorage();
+          tryWorkosCookieAuth();
         }).catch(function() {});
       } catch (e) {}
 
@@ -157,6 +245,8 @@ class _WebViewLoginScreenState extends State<WebViewLoginScreen> {
         try {
           if (this.responseText) {
             inspectValue(this.responseText, 'xhr_resp');
+            checkWorkosStorage();
+            tryWorkosCookieAuth();
           }
         } catch(e) {}
       });
@@ -167,6 +257,9 @@ class _WebViewLoginScreenState extends State<WebViewLoginScreen> {
   // Active scan inside JavaScript
   function runScan() {
     try {
+      if (checkWorkosStorage()) return;
+      tryWorkosCookieAuth();
+
       if (window.localStorage) {
         var as = localStorage.getItem('auth-storage');
         if (as) inspectValue(as, 'scan:auth-storage');
@@ -289,6 +382,34 @@ class _WebViewLoginScreenState extends State<WebViewLoginScreen> {
   Future<void> _scanForTokens() async {
     if (_isProcessingToken || !mounted) return;
     try {
+      // 1. Trigger cookie auth first (WorkOS)
+      try {
+        await _webViewController.runJavaScript('''
+if (typeof window.__tryWorkosCookieAuth === 'function') {
+  window.__tryWorkosCookieAuth();
+} else if (document.cookie && document.cookie.indexOf('workos-has-session') !== -1) {
+  fetch('https://api.workos.com/user_management/authenticate', {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Accept': 'application/json, text/plain, */*', 'Content-Type': 'application/json' },
+    body: JSON.stringify({ client_id: 'client_01KJWQWJ8M8WAKN8ZDWVVJ4BG1', grant_type: 'refresh_token' })
+  }).then(function(r) { return r.ok ? r.json() : null; }).then(function(data) {
+    if (data && (data.access_token || data.accessToken || data.token)) {
+      if (window.TokenChannel) {
+        window.TokenChannel.postMessage(JSON.stringify({
+          token: data.access_token || data.accessToken || data.token,
+          refreshToken: data.refresh_token || data.refreshToken || null,
+          expiresAt: data.expires_at || data.expiresAt || null,
+          user: data.user || null,
+          source: 'dart_scan_workos'
+        }));
+      }
+    }
+  }).catch(function() {});
+}
+''');
+      } catch (_) {}
+
       final result = await _webViewController.runJavaScriptReturningResult('''
 (function() {
   try {
@@ -354,7 +475,7 @@ class _WebViewLoginScreenState extends State<WebViewLoginScreen> {
   Future<void> _manualScanNow() async {
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
-        content: Text('🔍 Memindai token dari halaman...'),
+        content: Text('🔍 Memindai token & sesi dari halaman...'),
         duration: Duration(seconds: 1),
       ),
     );
@@ -365,6 +486,8 @@ class _WebViewLoginScreenState extends State<WebViewLoginScreen> {
     if (_isProcessingToken || !mounted) return;
 
     String rawToken = payload;
+    String? refreshToken;
+    int? expiresAt;
     Map<String, dynamic>? userData;
 
     // Check if payload is JSON
@@ -379,6 +502,26 @@ class _WebViewLoginScreenState extends State<WebViewLoginScreen> {
         if (map is Map) {
           if (map['token'] != null) {
             rawToken = map['token'].toString();
+          } else if (map['accessToken'] != null) {
+            rawToken = map['accessToken'].toString();
+          } else if (map['access_token'] != null) {
+            rawToken = map['access_token'].toString();
+          }
+          if (map['refreshToken'] != null) {
+            refreshToken = map['refreshToken'].toString();
+          } else if (map['refresh_token'] != null) {
+            refreshToken = map['refresh_token'].toString();
+          }
+          if (map['expiresAt'] != null || map['expires_at'] != null) {
+            final expVal = map['expiresAt'] ?? map['expires_at'];
+            if (expVal is int) {
+              expiresAt = expVal > 9999999999 ? expVal ~/ 1000 : expVal;
+            } else if (expVal != null) {
+              final parsed = int.tryParse(expVal.toString());
+              if (parsed != null) {
+                expiresAt = parsed > 9999999999 ? parsed ~/ 1000 : parsed;
+              }
+            }
           }
           if (map['user'] is Map) {
             userData = Map<String, dynamic>.from(map['user'] as Map);
@@ -388,8 +531,8 @@ class _WebViewLoginScreenState extends State<WebViewLoginScreen> {
     } catch (_) {}
 
     // Fallback regex if rawToken still contains JSON or Bearer
-    final jwtMatch = RegExp(r'eyJ[A-Za-z0-9_\-]+\.[A-Za-z0-9_\-]+\.[A-Za-z0-9_\-]+').firstMatch(rawToken);
-    final pasetoMatch = RegExp(r'v4\.public\.[A-Za-z0-9_\-]+').firstMatch(rawToken);
+    final jwtMatch = RegExp(r'eyJ[A-Za-z0-9_\\-]+\\.[A-Za-z0-9_\\-]+\\.[A-Za-z0-9_\\-]+').firstMatch(rawToken);
+    final pasetoMatch = RegExp(r'v4\\.public\\.[A-Za-z0-9_\\-]+').firstMatch(rawToken);
 
     if (jwtMatch != null) {
       rawToken = jwtMatch.group(0)!;
@@ -400,17 +543,46 @@ class _WebViewLoginScreenState extends State<WebViewLoginScreen> {
     final clean = ClipboardHelper.cleanToken(rawToken);
     if (clean.length < 20) return;
 
+    // Check expiration
+    final jwtExp = ClipboardHelper.getJwtExpiration(clean);
+    final nowSec = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    final isExpired = jwtExp != null && jwtExp < nowSec;
+
+    // If refreshToken was not captured in the payload, query localStorage directly
+    if (refreshToken == null || refreshToken.isEmpty) {
+      try {
+        final rt = await _webViewController.runJavaScriptReturningResult(
+          "localStorage.getItem('workos:refresh-token') || ''",
+        );
+        final cleanRt = rt.toString().replaceAll('"', '').trim();
+        if (cleanRt.isNotEmpty && cleanRt != 'null') {
+          refreshToken = cleanRt;
+        }
+      } catch (_) {}
+    }
+
+    // Guard against accepting a dead, unrefreshable token (from stale storage)
+    if (isExpired && (refreshToken == null || refreshToken.isEmpty)) {
+      debugPrint('Captured token is expired without refresh token. Triggering cookie auth instead...');
+      try {
+        await _webViewController.runJavaScript("if (typeof window.__tryWorkosCookieAuth === 'function') window.__tryWorkosCookieAuth();");
+      } catch (_) {}
+      return;
+    }
+
+    if (!mounted) return;
+
     setState(() {
       _isProcessingToken = true;
     });
 
     final authProvider = context.read<AuthProvider>();
-    bool success = await authProvider.loginWithToken(clean);
-
-    // If API call fails but we have userData from auth-storage, create session directly
-    if (!success && userData != null) {
-      success = await authProvider.loginWithUserData(clean, userData);
-    }
+    final success = await authProvider.saveSession(
+      accessToken: clean,
+      refreshToken: refreshToken,
+      expiresAt: expiresAt,
+      userMap: userData,
+    );
 
     if (!mounted) return;
 
@@ -505,6 +677,39 @@ class _WebViewLoginScreenState extends State<WebViewLoginScreen> {
             onPressed: () {
               _webViewController.reload();
             },
+          ),
+          PopupMenuButton<String>(
+            tooltip: 'Opsi Sesi',
+            icon: const Icon(Icons.more_vert_rounded),
+            onSelected: (val) async {
+              if (val == 'reset') {
+                try {
+                  await WebViewCookieManager().clearCookies();
+                  await _webViewController.clearCache();
+                  await _webViewController.runJavaScript('localStorage.clear(); sessionStorage.clear();');
+                } catch (_) {}
+                _webViewController.loadRequest(Uri.parse('https://s1.shinigami.mx/'));
+                if (!context.mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Sesi & cookie web berhasil dibersihkan.'),
+                    duration: Duration(seconds: 2),
+                  ),
+                );
+              }
+            },
+            itemBuilder: (_) => [
+              const PopupMenuItem(
+                value: 'reset',
+                child: Row(
+                  children: [
+                    Icon(Icons.cleaning_services_rounded, size: 18, color: AppColors.primary),
+                    SizedBox(width: 8),
+                    Text('Bersihkan Sesi / Ganti Akun', style: TextStyle(fontSize: 13)),
+                  ],
+                ),
+              ),
+            ],
           ),
         ],
         bottom: _isLoading

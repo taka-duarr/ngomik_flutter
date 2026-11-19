@@ -38,7 +38,7 @@ class LiquidGlassContainer extends StatelessWidget {
     this.padding,
     this.margin,
     this.borderRadius = AppRadius.lg,
-    this.blur = 18.0,
+    this.blur = 20.0,
     this.frosted = false,
     this.color,
     this.border,
@@ -56,7 +56,9 @@ class LiquidGlassContainer extends StatelessWidget {
 
     Widget surface = DecoratedBox(
       decoration: BoxDecoration(
-        color: color ?? (frosted ? AppColors.glassFill : AppColors.glassFillStrong),
+        color:
+            color ??
+            (frosted ? AppColors.glassFill : AppColors.glassFillStrong),
         gradient: gradient,
         borderRadius: radius,
         border: border,
@@ -67,10 +69,7 @@ class LiquidGlassContainer extends StatelessWidget {
           borderRadius: radius,
           gradient: AppColors.glassSheenGradient,
         ),
-        child: Padding(
-          padding: padding ?? EdgeInsets.zero,
-          child: child,
-        ),
+        child: Padding(padding: padding ?? EdgeInsets.zero, child: child),
       ),
     );
 
@@ -84,10 +83,17 @@ class LiquidGlassContainer extends StatelessWidget {
     if (frosted) {
       surface = ClipRRect(
         borderRadius: radius,
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: blur, sigmaY: blur),
-          child: surface,
-        ),
+        // Grouped: shares one backdrop read per frame with every other
+        // frosted surface under the app-wide BackdropGroup.
+        child: BackdropGroup.of(context) != null
+            ? BackdropFilter.grouped(
+                filter: ImageFilter.blur(sigmaX: blur, sigmaY: blur),
+                child: surface,
+              )
+            : BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: blur, sigmaY: blur),
+                child: surface,
+              ),
       );
     }
 
@@ -96,7 +102,8 @@ class LiquidGlassContainer extends StatelessWidget {
       height: height,
       decoration: BoxDecoration(
         borderRadius: radius,
-        boxShadow: boxShadow ??
+        boxShadow:
+            boxShadow ??
             const [
               BoxShadow(
                 color: Color(0x33000000),
@@ -113,7 +120,11 @@ class LiquidGlassContainer extends StatelessWidget {
     }
 
     if (onTap != null) {
-      return BouncingTap(scaleFactor: scaleFactor, onTap: onTap, child: content);
+      return BouncingTap(
+        scaleFactor: scaleFactor,
+        onTap: onTap,
+        child: content,
+      );
     }
 
     return content;
@@ -149,5 +160,7 @@ class GlassEdgePainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant GlassEdgePainter old) =>
-      old.radius != radius || old.gradient != gradient || old.strokeWidth != strokeWidth;
+      old.radius != radius ||
+      old.gradient != gradient ||
+      old.strokeWidth != strokeWidth;
 }

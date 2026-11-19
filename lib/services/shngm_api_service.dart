@@ -1,4 +1,4 @@
-import 'dart:convert';
+  import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import '../core/constants/api_endpoints.dart';
@@ -8,9 +8,11 @@ import '../models/user.dart';
 import '../models/comment.dart';
 import '../models/reading_history.dart';
 import '../core/utils/clipboard_helper.dart';
+import 'chapter_pager.dart';
 
 class ShngmApiService {
   final http.Client _client = http.Client();
+  static Future<String?> Function()? onTokenRefresh;
 
   Future<List<Manga>> fetchMangaList({
     int page = 1,
@@ -125,7 +127,7 @@ class ShngmApiService {
       // Fetch detail and initial chapters in parallel for maximum speed
       final results = await Future.wait([
         _client.get(detailUri, headers: ApiEndpoints.defaultHeaders()),
-        fetchChapterPage(mangaId, page: 1, pageSize: 25),
+        fetchChapterPage(mangaId, limit: ChapterPager.defaultLimit),
       ]);
 
       final detailResponse = results[0] as http.Response;
@@ -149,56 +151,67 @@ class ShngmApiService {
     }
   }
 
-  Future<ChapterPageResult> fetchChapterPage(String mangaId, {int page = 1, int pageSize = 25}) async {
+  /// One page of a manga's chapters.
+  ///
+  /// The API paginates with a cursor: pass the previous result's
+  /// [ChapterPageResult.nextCursor] to get the following page. It does not
+  /// report a total, so callers can't jump to an arbitrary page. Sorting and
+  /// chapter-number search happen server-side, across every page.
+  Future<ChapterPageResult> fetchChapterPage(
+    String mangaId, {
+    String? cursor,
+    int limit = 24,
+    bool ascending = false,
+    String? search,
+  }) async {
     try {
       final uri = Uri.parse(ApiEndpoints.chapterList(mangaId)).replace(queryParameters: {
-        'page': page.toString(),
-        'page_size': pageSize.toString(),
+        'limit': limit.toString(),
         'sort_by': 'chapter_number',
-        'sort_order': 'desc',
+        'sort_order': ascending ? 'asc' : 'desc',
+        if (cursor != null && cursor.isNotEmpty) 'cursor': cursor,
+        if (search != null && search.trim().isNotEmpty) 'search': search.trim(),
       });
       final response = await _client.get(uri, headers: ApiEndpoints.defaultHeaders());
 
-      if (response.statusCode == 200) {
-        final chData = jsonDecode(response.body);
-        final chList = chData['data'] ?? chData['results'] ?? [];
-        final meta = chData['meta'] as Map<String, dynamic>?;
+      if (response.statusCode != 200) {
+        debugPrint('fetchChapterPage: HTTP ${response.statusCode}');
+        return const ChapterPageResult(chapters: [], hasNext: false, failed: true);
+      }
 
-        List<Chapter> chapters = [];
-        if (chList is List) {
-          chapters = chList
+      final chData = jsonDecode(response.body);
+      final chList = chData['data'] ?? chData['results'] ?? [];
+      final meta = chData['meta'] is Map ? chData['meta'] as Map : const {};
+
+      final chapters = chList is List
+          ? chList
               .whereType<Map<String, dynamic>>()
               .map((ch) => Chapter.fromJson(ch, mangaId: mangaId))
-              .toList();
-        }
+              .toList()
+          : <Chapter>[];
 
-        final curPage = meta?['page'] is int
-            ? meta!['page'] as int
-            : int.tryParse(meta?['page']?.toString() ?? '') ?? page;
-        final totalPage = meta?['total_page'] is int
-            ? meta!['total_page'] as int
-            : int.tryParse(meta?['total_page']?.toString() ?? '') ??
-                (chapters.length >= pageSize ? page + 1 : page);
-        final totalRecord = meta?['total_record'] is int
-            ? meta!['total_record'] as int
-            : int.tryParse(meta?['total_record']?.toString() ?? '') ?? chapters.length;
+      final nextCursor = meta['next_cursor']?.toString();
+      final hasNext = meta['has_next'] == true && nextCursor != null && nextCursor.isNotEmpty;
 
-        return ChapterPageResult(
-          chapters: chapters,
-          page: curPage,
-          totalPages: totalPage,
-          totalRecords: totalRecord,
-        );
-      }
-      return ChapterPageResult(chapters: [], page: page, totalPages: page, totalRecords: 0);
+      return ChapterPageResult(
+        chapters: chapters,
+        hasNext: hasNext,
+        nextCursor: hasNext ? nextCursor : null,
+      );
     } catch (e) {
       debugPrint('Error fetchChapterPage: $e');
-      return ChapterPageResult(chapters: [], page: page, totalPages: page, totalRecords: 0);
+      return const ChapterPageResult(chapters: [], hasNext: false, failed: true);
     }
   }
 
-  Future<List<Chapter>> fetchChapterList(String mangaId, {int page = 1, int pageSize = 25}) async {
-    final res = await fetchChapterPage(mangaId, page: page, pageSize: pageSize);
+  /// The very first chapter (lowest number) — for "Mulai Baca".
+  Future<Chapter?> fetchFirstChapter(String mangaId) async {
+    final res = await fetchChapterPage(mangaId, limit: 1, ascending: true);
+    return res.chapters.isNotEmpty ? res.chapters.first : null;
+  }
+
+  Future<List<Chapter>> fetchChapterList(String mangaId, {int limit = 24}) async {
+    final res = await fetchChapterPage(mangaId, limit: limit);
     return res.chapters;
   }
 
@@ -229,7 +242,14 @@ class ShngmApiService {
           (clean.split('.').length == 3 && clean.length > 30);
       if (isToken) {
         final uri = Uri.parse(ApiEndpoints.userDetail);
-        final response = await _client.get(uri, headers: ApiEndpoints.defaultHeaders(token: clean));
+        var response = await _client.get(uri, headers: ApiEndpoints.defaultHeaders(token: clean));
+
+        if (response.statusCode == 401 && onTokenRefresh != null) {
+          final refreshed = await onTokenRefresh!();
+          if (refreshed != null && refreshed != clean) {
+            response = await _client.get(uri, headers: ApiEndpoints.defaultHeaders(token: refreshed));
+          }
+        }
 
         if (response.statusCode == 200) {
           final data = jsonDecode(response.body);
@@ -263,7 +283,14 @@ class ShngmApiService {
       };
 
       final uri = Uri.parse(ApiEndpoints.bookmarkList).replace(queryParameters: queryParams);
-      final response = await _client.get(uri, headers: ApiEndpoints.defaultHeaders(token: token));
+      var response = await _client.get(uri, headers: ApiEndpoints.defaultHeaders(token: token));
+
+      if (response.statusCode == 401 && onTokenRefresh != null) {
+        final refreshed = await onTokenRefresh!();
+        if (refreshed != null && refreshed != token) {
+          response = await _client.get(uri, headers: ApiEndpoints.defaultHeaders(token: refreshed));
+        }
+      }
 
       if (response.statusCode != 200) debugPrint('fetchUserBookmarks: HTTP ${response.statusCode}');
       if (response.statusCode == 200) {
@@ -322,7 +349,14 @@ class ShngmApiService {
       };
 
       final uri = Uri.parse(ApiEndpoints.historyList).replace(queryParameters: queryParams);
-      final response = await _client.get(uri, headers: ApiEndpoints.defaultHeaders(token: clean));
+      var response = await _client.get(uri, headers: ApiEndpoints.defaultHeaders(token: clean));
+
+      if (response.statusCode == 401 && onTokenRefresh != null) {
+        final refreshed = await onTokenRefresh!();
+        if (refreshed != null && refreshed != clean) {
+          response = await _client.get(uri, headers: ApiEndpoints.defaultHeaders(token: refreshed));
+        }
+      }
 
       if (response.statusCode != 200) debugPrint('fetchUserHistory: HTTP ${response.statusCode}');
       if (response.statusCode == 200) {
@@ -664,19 +698,34 @@ class ShngmApiService {
     }
   }
 
-  Future<String?> fetchChatConnectionToken({String? token}) async {
+  Future<Map<String, dynamic>?> refreshWorkosToken(String refreshToken) async {
     try {
-      final uri = Uri.parse(ApiEndpoints.chatConnectionToken);
-      final response = await _client.get(
+      final uri = Uri.parse(ApiEndpoints.workosAuthUrl);
+      final body = {
+        'client_id': ApiEndpoints.workosClientId,
+        'grant_type': 'refresh_token',
+        'refresh_token': refreshToken,
+      };
+
+      final response = await _client.post(
         uri,
-        headers: ApiEndpoints.defaultHeaders(token: token),
+        headers: {
+          'Accept': 'application/json, text/plain, */*',
+          'Content-Type': 'application/json',
+          'Origin': ApiEndpoints.origin,
+          'Referer': ApiEndpoints.referer,
+          'User-Agent': ApiEndpoints.userAgent,
+        },
+        body: jsonEncode(body),
       );
+
       if (response.statusCode == 200) {
-        final resJson = jsonDecode(response.body);
-        return resJson['token']?.toString() ?? resJson['data']?.toString();
+        return jsonDecode(response.body) as Map<String, dynamic>;
+      } else {
+        debugPrint('refreshWorkosToken failed: HTTP ${response.statusCode} - ${response.body}');
       }
     } catch (e) {
-      debugPrint('Error fetchChatConnectionToken: $e');
+      debugPrint('Error refreshWorkosToken: $e');
     }
     return null;
   }
@@ -684,15 +733,17 @@ class ShngmApiService {
 
 class ChapterPageResult {
   final List<Chapter> chapters;
-  final int page;
-  final int totalPages;
-  final int totalRecords;
+  final bool hasNext;
+  final String? nextCursor;
+
+  /// True when the request itself failed (network / non-200), as opposed to
+  /// an empty page.
+  final bool failed;
 
   const ChapterPageResult({
     required this.chapters,
-    required this.page,
-    required this.totalPages,
-    required this.totalRecords,
+    required this.hasNext,
+    this.nextCursor,
+    this.failed = false,
   });
 }
-

@@ -8,6 +8,7 @@ import 'providers/auth_provider.dart';
 import 'providers/bookmark_provider.dart';
 import 'providers/history_provider.dart';
 import 'providers/manga_provider.dart';
+import 'services/shngm_api_service.dart';
 import 'screens/splash/splash_screen.dart';
 
 void main() async {
@@ -39,13 +40,28 @@ void main() async {
   final historyProvider = HistoryProvider();
   final mangaProvider = MangaProvider();
 
+  // Self-healing auth: transparently refresh session on 401 API responses
+  ShngmApiService.onTokenRefresh = () async {
+    final refreshed = await authProvider.refreshTokenSilently();
+    if (refreshed) {
+      return authProvider.token;
+    }
+    return null;
+  };
+
   // Providers are initialised while the animated splash plays, instead of
   // blocking the first frame.
-  Future<void> bootstrap() async {
+  // Real progress for the splash bar: auth first, then bookmarks and history
+  // in parallel, each finished step moving the bar on.
+  Future<void> bootstrap(ValueChanged<double> report) async {
+    report(0.08);
     await authProvider.init();
+    report(0.45);
+    var finished = 0;
+    void stepDone() => report(0.45 + 0.55 * (++finished / 2));
     await Future.wait([
-      bookmarkProvider.init(token: authProvider.token),
-      historyProvider.init(token: authProvider.token),
+      bookmarkProvider.init(token: authProvider.token).whenComplete(stepDone),
+      historyProvider.init(token: authProvider.token).whenComplete(stepDone),
     ]);
   }
 
@@ -65,7 +81,7 @@ class NgomikApp extends StatelessWidget {
   final BookmarkProvider? bookmarkProvider;
   final HistoryProvider? historyProvider;
   final MangaProvider? mangaProvider;
-  final Future<void> Function()? bootstrap;
+  final SplashBootstrap? bootstrap;
 
   const NgomikApp({
     super.key,
@@ -101,6 +117,10 @@ class NgomikApp extends StatelessWidget {
         title: 'Ngomik',
         debugShowCheckedModeBanner: false,
         theme: AppTheme.darkTheme,
+        // One shared backdrop for every grouped frosted surface (nav bar,
+        // pinned headers, glass panels): the engine reads the scene behind
+        // them once per frame instead of once per blur.
+        builder: (context, child) => BackdropGroup(child: child!),
         home: SplashScreen(bootstrap: bootstrap),
       ),
     );

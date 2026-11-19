@@ -478,8 +478,8 @@ class _TabsHeader extends SliverPersistentHeaderDelegate {
 
     // Pinned: frosted strip so the grid scrolling underneath stays out of the way.
     return ClipRect(
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+      child: BackdropFilter.grouped(
+        filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
         child: Container(
           decoration: const BoxDecoration(
             color: Color(0xD9262B48),

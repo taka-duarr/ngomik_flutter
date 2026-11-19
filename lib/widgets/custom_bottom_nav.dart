@@ -25,7 +25,8 @@ class CustomBottomNav extends StatefulWidget {
   State<CustomBottomNav> createState() => _CustomBottomNavState();
 }
 
-class _CustomBottomNavState extends State<CustomBottomNav> with SingleTickerProviderStateMixin {
+class _CustomBottomNavState extends State<CustomBottomNav>
+    with SingleTickerProviderStateMixin {
   static const List<_NavItemData> _items = [
     _NavItemData(icon: Icons.grid_view_rounded, label: 'Jelajah'),
     _NavItemData(icon: Icons.local_fire_department_rounded, label: 'Populer'),
@@ -39,10 +40,12 @@ class _CustomBottomNavState extends State<CustomBottomNav> with SingleTickerProv
   static const double _barRadius = 22;
   static const double _sidePad = 10; // inside the bar
   static const double _bubble = 52;
-  static const double _bubbleRise = 24; // how far the bubble sits above the bar top
+  static const double _bubbleRise =
+      24; // how far the bubble sits above the bar top
   static const double _notchWidth = 84;
   static const double _notchDepth = 34;
-  static const double _iconRise = _bubbleRise + _barHeight / 2 - _bubble / 2 + 1;
+  static const double _iconRise =
+      _bubbleRise + _barHeight / 2 - _bubble / 2 + 1;
 
   // Gentle overshoot so the bubble "lands" instead of stopping dead.
   static const Curve _travel = Cubic(0.34, 1.32, 0.64, 1.0);
@@ -55,7 +58,10 @@ class _CustomBottomNavState extends State<CustomBottomNav> with SingleTickerProv
   void initState() {
     super.initState();
     _from = _to = widget.currentIndex.toDouble();
-    _c = AnimationController(vsync: this, duration: const Duration(milliseconds: 560))..value = 1;
+    _c = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 560),
+    )..value = 1;
   }
 
   @override
@@ -100,7 +106,8 @@ class _CustomBottomNavState extends State<CustomBottomNav> with SingleTickerProv
                   final pos = _position;
                   final x = centerOf(pos);
                   // 0 → 1 → 0 across the trip; scaled by distance so short hops wobble less.
-                  final travel = math.sin(math.pi * _c.value.clamp(0.0, 1.0)) *
+                  final travel =
+                      math.sin(math.pi * _c.value.clamp(0.0, 1.0)) *
                       (0.35 + 0.65 * math.min(1.0, (_to - _from).abs() / 2));
 
                   final barPath = _LiquidBarPath.build(
@@ -131,7 +138,11 @@ class _CustomBottomNavState extends State<CustomBottomNav> with SingleTickerProv
                         height: _bubble,
                         child: Transform(
                           alignment: Alignment.center,
-                          transform: Matrix4.diagonal3Values(1 + 0.28 * travel, 1 - 0.14 * travel, 1),
+                          transform: Matrix4.diagonal3Values(
+                            1 + 0.28 * travel,
+                            1 - 0.14 * travel,
+                            1,
+                          ),
                           child: const _Bubble(),
                         ),
                       ),
@@ -148,7 +159,10 @@ class _CustomBottomNavState extends State<CustomBottomNav> with SingleTickerProv
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: List.generate(_items.length, (i) {
                             // 1 when the bubble is exactly over this item, fading to 0 one slot away.
-                            final active = (1 - (pos - i).abs()).clamp(0.0, 1.0);
+                            final active = (1 - (pos - i).abs()).clamp(
+                              0.0,
+                              1.0,
+                            );
                             return Expanded(
                               child: _NavItem(
                                 data: _items[i],
@@ -184,13 +198,30 @@ class _LiquidBarPath {
     required double notchWidth,
     required double notchDepth,
   }) {
-    final bar = Path()..addRRect(RRect.fromRectAndRadius(Offset.zero & size, Radius.circular(radius)));
+    final bar = Path()
+      ..addRRect(
+        RRect.fromRectAndRadius(Offset.zero & size, Radius.circular(radius)),
+      );
 
     final half = notchWidth / 2;
     final notch = Path()
       ..moveTo(notchX - half, -1)
-      ..cubicTo(notchX - half * 0.55, -1, notchX - half * 0.62, notchDepth, notchX, notchDepth)
-      ..cubicTo(notchX + half * 0.62, notchDepth, notchX + half * 0.55, -1, notchX + half, -1)
+      ..cubicTo(
+        notchX - half * 0.55,
+        -1,
+        notchX - half * 0.62,
+        notchDepth,
+        notchX,
+        notchDepth,
+      )
+      ..cubicTo(
+        notchX + half * 0.62,
+        notchDepth,
+        notchX + half * 0.55,
+        -1,
+        notchX + half,
+        -1,
+      )
       ..close();
 
     return Path.combine(PathOperation.difference, bar, notch);
@@ -211,8 +242,8 @@ class _GlassBar extends StatelessWidget {
         CustomPaint(painter: _BarShadowPainter(path)),
         ClipPath(
           clipper: _PathClipper(path),
-          child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 22, sigmaY: 22),
+          child: BackdropFilter.grouped(
+            filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
             child: const DecoratedBox(
               decoration: BoxDecoration(
                 gradient: LinearGradient(
@@ -247,7 +278,12 @@ class _BarShadowPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    canvas.drawShadow(path.shift(const Offset(0, 4)), const Color(0xFF0E1022), 14, true);
+    canvas.drawShadow(
+      path.shift(const Offset(0, 4)),
+      const Color(0xFF0E1022),
+      14,
+      true,
+    );
   }
 
   @override
@@ -297,27 +333,27 @@ class _Bubble extends StatelessWidget {
         ],
       ),
       child: ClipOval(
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-          child: DecoratedBox(
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            gradient: const LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [Color(0xE6F0469F), Color(0xE6C21A78)],
+            ),
+            border: Border.all(
+              color: Colors.white.withValues(alpha: 0.35),
+              width: 1,
+            ),
+          ),
+          // Specular highlight on the upper-left
+          child: const DecoratedBox(
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              gradient: const LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [Color(0xE6F0469F), Color(0xE6C21A78)],
-              ),
-              border: Border.all(color: Colors.white.withValues(alpha: 0.35), width: 1),
-            ),
-            // Specular highlight on the upper-left
-            child: const DecoratedBox(
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: RadialGradient(
-                  center: Alignment(-0.45, -0.55),
-                  radius: 0.75,
-                  colors: [Color(0x59FFFFFF), Color(0x00FFFFFF)],
-                ),
+              gradient: RadialGradient(
+                center: Alignment(-0.45, -0.55),
+                radius: 0.75,
+                colors: [Color(0x59FFFFFF), Color(0x00FFFFFF)],
               ),
             ),
           ),
@@ -346,7 +382,11 @@ class _NavItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final iconColor = Color.lerp(AppColors.textMuted, Colors.white, activeness)!;
+    final iconColor = Color.lerp(
+      AppColors.textMuted,
+      Colors.white,
+      activeness,
+    )!;
 
     return Semantics(
       button: true,
@@ -366,7 +406,11 @@ class _NavItem extends StatelessWidget {
               // Icon: sits mid-bar, rises into the bubble as it becomes active
               Transform.translate(
                 offset: Offset(0, -rise * activeness),
-                child: Icon(data.icon, size: 24 + 1 * activeness, color: iconColor),
+                child: Icon(
+                  data.icon,
+                  size: 24 + 1 * activeness,
+                  color: iconColor,
+                ),
               ),
               // Label: fades/slides in at the bottom of the bar for the active tab
               Positioned(

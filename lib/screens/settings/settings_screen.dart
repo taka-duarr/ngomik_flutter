@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:provider/provider.dart';
+import 'package:webview_flutter/webview_flutter.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/utils/clipboard_helper.dart';
 import '../../providers/auth_provider.dart';
@@ -633,6 +634,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
               child: OutlinedButton.icon(
                 onPressed: () async {
                   await authProvider.logout();
+                  try {
+                    await WebViewCookieManager().clearCookies();
+                  } catch (_) {}
                   if (context.mounted) {
                     context.read<BookmarkProvider>().clear();
                     context.read<HistoryProvider>().clearHistory();

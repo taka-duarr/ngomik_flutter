@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../../core/constants/app_colors.dart';
 import '../../providers/bookmark_provider.dart';
 import '../../providers/auth_provider.dart';
+import '../../widgets/sakuga_search_field.dart';
 import '../../widgets/app_backdrop.dart';
 import '../../widgets/glass_widgets.dart';
 import '../../widgets/google_dots_loading.dart';
@@ -111,7 +112,7 @@ class _BookmarksScreenState extends State<BookmarksScreen> {
             SliverToBoxAdapter(
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
-                child: GlassSearchField(
+                child: SakugaSearchField(
                   controller: _filterCtrl,
                   hintText: 'Cari di bookmark…',
                   onChanged: (val) => setState(() => _filterQuery = val),

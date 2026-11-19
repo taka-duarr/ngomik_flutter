@@ -32,6 +32,32 @@ class ClipboardHelper {
     return trimmed;
   }
 
+  /// Decode JWT payload (part 1 of a 3-part JWT)
+  static Map<String, dynamic>? parseJwtPayload(String jwt) {
+    try {
+      final clean = cleanToken(jwt);
+      final parts = clean.split('.');
+      if (parts.length < 2) return null;
+      var payload = parts[1].replaceAll('-', '+').replaceAll('_', '/');
+      while (payload.length % 4 != 0) {
+        payload += '=';
+      }
+      final decoded = utf8.decode(base64.decode(payload));
+      return jsonDecode(decoded) as Map<String, dynamic>;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Get expiration timestamp in seconds (Unix epoch) from JWT
+  static int? getJwtExpiration(String jwt) {
+    final payload = parseJwtPayload(jwt);
+    if (payload != null && payload['exp'] != null) {
+      return int.tryParse(payload['exp'].toString());
+    }
+    return null;
+  }
+
   // --- Supabase Cookie (lasts ~60 days) ---
 
   static bool isSupabaseCookie(String? text) {

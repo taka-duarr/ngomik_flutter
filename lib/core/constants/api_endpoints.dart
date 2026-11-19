@@ -19,6 +19,10 @@ class ApiEndpoints {
   static String get chatConnectionToken => '$commentsBaseUrl/chat/connection-token';
   static String commentVote(String commentId, String action) => '$commentsBaseUrl/votes/comment/$commentId/$action';
 
+  // WorkOS AuthKit
+  static String get workosAuthUrl => 'https://api.workos.com/user_management/authenticate';
+  static String get workosClientId => _getEnv('WORKOS_CLIENT_ID', 'client_01KJWQWJ8M8WAKN8ZDWVVJ4BG1');
+
   // Page key format helpers for Shinigami Comments
   static String mangaPageKey(String mangaId) => 'manga:$mangaId';
   static String chapterPageKey(String mangaId, String chapterId) => 'manga:$mangaId:chapter:$chapterId';

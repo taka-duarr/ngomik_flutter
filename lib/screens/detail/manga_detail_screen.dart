@@ -1,18 +1,22 @@
 import 'dart:ui' show ImageFilter;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:provider/provider.dart';
 import '../../core/constants/api_endpoints.dart';
 import '../../core/constants/app_colors.dart';
 import '../../models/manga.dart';
 import '../../models/chapter.dart';
+import '../../services/chapter_pager.dart';
 import '../../services/shngm_api_service.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/bookmark_provider.dart';
 import '../../providers/history_provider.dart';
+import '../../widgets/sakuga_search_field.dart';
 import '../../widgets/chapter_list_tile.dart';
 import '../../widgets/app_network_image.dart';
 import '../../widgets/app_backdrop.dart';
+import '../../widgets/baked_blur_image.dart';
 import '../../widgets/glass_widgets.dart';
 import '../../widgets/google_dots_loading.dart';
 import '../../widgets/liquid_glass_container.dart';
@@ -36,18 +40,16 @@ class MangaDetailScreen extends StatefulWidget {
 class _MangaDetailScreenState extends State<MangaDetailScreen> {
   final ShngmApiService _apiService = ShngmApiService();
   Manga? _manga;
-  List<Chapter> _chapters = [];
   bool _isLoading = true;
-  bool _isLoadingChapters = false;
-  bool _isAscending = false;
   bool _synopsisExpanded = false;
+  bool _openingFirst = false;
 
-  // Chapter Pagination State
-  int _chapterPage = 1;
-  int _totalChapterPages = 1;
-  int _totalChapterCount = 0;
-  static const int _pageSize = 20;
-  String _chapterSearchQuery = '';
+  // Chapter list: cursor-paginated, sorted & searched server-side.
+  late final ChapterPager _pager = ChapterPager(mangaId: widget.mangaId)
+    ..addListener(_onPagerChanged);
+
+  /// Newest chapter, taken from the first newest-first page.
+  Chapter? _latestChapter;
 
   final ScrollController _scrollController = ScrollController();
   final TextEditingController _chapterSearchCtrl = TextEditingController();
@@ -70,6 +72,9 @@ class _MangaDetailScreenState extends State<MangaDetailScreen> {
     _scrollController.dispose();
     _chapterSearchCtrl.dispose();
     _collapsed.dispose();
+    _pager
+      ..removeListener(_onPagerChanged)
+      ..dispose();
     super.dispose();
   }
 
@@ -100,12 +105,10 @@ class _MangaDetailScreenState extends State<MangaDetailScreen> {
       final chResult = result['chapterResult'] as ChapterPageResult?;
       setState(() {
         _manga = result['manga'] as Manga?;
-        _chapters = chResult?.chapters ?? (result['chapters'] as List<Chapter>?) ?? [];
-        _chapterPage = chResult?.page ?? 1;
-        _totalChapterPages = chResult?.totalPages ?? 1;
-        _totalChapterCount = chResult?.totalRecords ?? _chapters.length;
+        _latestChapter = (chResult?.chapters.isNotEmpty ?? false) ? chResult!.chapters.first : null;
         _isLoading = false;
       });
+      if (chResult != null) _pager.seed(chResult);
     } else if (mounted) {
       setState(() {
         _isLoading = false;
@@ -113,19 +116,46 @@ class _MangaDetailScreenState extends State<MangaDetailScreen> {
     }
   }
 
-  Future<void> _goToChapterPage(int page) async {
-    if (page < 1 || page > _totalChapterPages || page == _chapterPage || _isLoadingChapters) return;
-    setState(() => _isLoadingChapters = true);
+  void _onPagerChanged() {
+    if (mounted) setState(() {});
+  }
 
-    final res = await _apiService.fetchChapterPage(widget.mangaId, page: page, pageSize: _pageSize);
-    if (mounted) {
-      setState(() {
-        _chapters = res.chapters;
-        _chapterPage = res.page;
-        _totalChapterPages = res.totalPages;
-        _totalChapterCount = res.totalRecords;
-        _isLoadingChapters = false;
-      });
+  final GlobalKey _chapterHeaderKey = GlobalKey();
+
+  /// Runs a page change, then brings the top of the chapter list back into
+  /// view (just under the pinned app bar) so the new page reads from its start.
+  Future<void> _changePage(Future<void> Function() action) async {
+    await action();
+    if (!mounted || !_scrollController.hasClients) return;
+    final box = _chapterHeaderKey.currentContext?.findRenderObject();
+    if (box == null || !box.attached) return;
+    final viewport = RenderAbstractViewport.maybeOf(box);
+    if (viewport == null) return;
+    // Scroll offset that puts the header at the top of the viewport, minus
+    // the pinned app bar that overlays it.
+    final reveal = viewport.getOffsetToReveal(box, 0.0).offset;
+    final topInset = MediaQuery.of(context).padding.top + 60;
+    final target = reveal - topInset;
+    _scrollController.animateTo(
+      target.clamp(0.0, _scrollController.position.maxScrollExtent),
+      duration: const Duration(milliseconds: 380),
+      curve: Curves.easeOutCubic,
+    );
+  }
+
+  /// Opens chapter 1, fetched on demand: the visible page may not contain it.
+  Future<void> _openFirstChapter(Manga manga) async {
+    if (_openingFirst) return;
+    setState(() => _openingFirst = true);
+    final first = await _apiService.fetchFirstChapter(widget.mangaId);
+    if (!mounted) return;
+    setState(() => _openingFirst = false);
+    if (first != null) {
+      _openReader(manga, first.id, first.chapterNumber);
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Gagal memuat chapter pertama. Coba lagi.')),
+      );
     }
   }
 
@@ -161,16 +191,8 @@ class _MangaDetailScreenState extends State<MangaDetailScreen> {
     final isBookmarked = manga != null && bookmarkProvider.isBookmarked(manga.id);
     final lastRead = manga != null ? historyProvider.getLastReadChapter(manga.id) : null;
 
-    final query = _chapterSearchQuery.trim().toLowerCase();
-    final filtered = query.isEmpty
-        ? _chapters
-        : _chapters.where((c) {
-            return c.chapterNumber.toLowerCase().contains(query) ||
-                (c.chapterTitle != null && c.chapterTitle!.toLowerCase().contains(query));
-          }).toList();
-
-    final sortedChapters = _isAscending ? filtered.reversed.toList() : filtered;
-    final latestChapter = _chapters.isNotEmpty ? _chapters.first : null;
+    final chapters = _pager.chapters;
+    final latestChapter = _latestChapter;
 
     void toggleBookmark() {
       if (manga != null) bookmarkProvider.toggleBookmark(manga, token: authProvider.token);
@@ -220,6 +242,7 @@ class _MangaDetailScreenState extends State<MangaDetailScreen> {
 
                       // ── Chapter list ─────────────────────────────────────
                       SliverToBoxAdapter(
+                        key: _chapterHeaderKey,
                         child: SectionHeader(
                           title: 'Daftar Chapter',
                           padding: const EdgeInsets.fromLTRB(20, 8, 12, 10),
@@ -227,23 +250,25 @@ class _MangaDetailScreenState extends State<MangaDetailScreen> {
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               GlassTag(
-                                label: '${_totalChapterCount > 0 ? _totalChapterCount : _chapters.length}',
+                                label: _pager.estimatedTotalChapters != null
+                                    ? '±${_pager.estimatedTotalChapters}'
+                                    : '${chapters.length}',
                                 color: AppColors.textSecondary,
                               ),
                               const SizedBox(width: 4),
                               TextButton.icon(
-                                onPressed: () => setState(() => _isAscending = !_isAscending),
+                                onPressed: () => _pager.setAscending(!_pager.ascending),
                                 style: TextButton.styleFrom(
                                   foregroundColor: AppColors.textSecondary,
                                   padding: const EdgeInsets.symmetric(horizontal: 8),
                                   minimumSize: const Size(0, 36),
                                 ),
                                 icon: Icon(
-                                  _isAscending ? Icons.arrow_upward_rounded : Icons.arrow_downward_rounded,
+                                  _pager.ascending ? Icons.arrow_upward_rounded : Icons.arrow_downward_rounded,
                                   size: 16,
                                 ),
                                 label: Text(
-                                  _isAscending ? 'Terlama' : 'Terbaru',
+                                  _pager.ascending ? 'Terlama' : 'Terbaru',
                                   style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600),
                                 ),
                               ),
@@ -255,35 +280,39 @@ class _MangaDetailScreenState extends State<MangaDetailScreen> {
                       SliverToBoxAdapter(
                         child: Padding(
                           padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-                          child: GlassSearchField(
+                          child: SakugaSearchField(
                             controller: _chapterSearchCtrl,
                             hintText: 'Cari chapter…  contoh: 120',
-                            onChanged: (v) => setState(() => _chapterSearchQuery = v),
-                            showClear: _chapterSearchQuery.isNotEmpty,
+                            onChanged: (v) => setState(() => _pager.setSearch(v)),
+                            showClear: _chapterSearchCtrl.text.isNotEmpty,
                             onClear: () {
                               _chapterSearchCtrl.clear();
-                              setState(() => _chapterSearchQuery = '');
+                              setState(() => _pager.setSearch(''));
                             },
                           ),
                         ),
                       ),
 
-                      if (_isLoadingChapters)
+                      // Spinner only on a cold load; when switching pages the
+                      // old list stays (dimmed) so the layout doesn't jump.
+                      if (_pager.isLoading && chapters.isEmpty)
                         const SliverToBoxAdapter(
                           child: Padding(
                             padding: EdgeInsets.symmetric(vertical: 40),
                             child: Center(child: GoogleDotsLoading(dotSize: 10, jumpHeight: 14)),
                           ),
                         )
-                      else if (sortedChapters.isEmpty && !_isLoading)
+                      else if (chapters.isEmpty && !_isLoading)
                         SliverToBoxAdapter(
                           child: Padding(
                             padding: const EdgeInsets.symmetric(vertical: 32, horizontal: 24),
                             child: Center(
                               child: Text(
-                                query.isNotEmpty
-                                    ? 'Chapter "$_chapterSearchQuery" tidak ada di halaman ini'
-                                    : 'Belum ada chapter tersedia',
+                                _pager.failed
+                                    ? 'Gagal memuat chapter. Coba lagi nanti.'
+                                    : _pager.isSearching
+                                        ? 'Chapter "${_pager.search.trim()}" tidak ditemukan'
+                                        : 'Belum ada chapter tersedia',
                                 textAlign: TextAlign.center,
                                 style: const TextStyle(color: AppColors.textMuted, fontSize: 13),
                               ),
@@ -293,23 +322,29 @@ class _MangaDetailScreenState extends State<MangaDetailScreen> {
                       else
                         SliverPadding(
                           padding: const EdgeInsets.symmetric(horizontal: 16),
-                          sliver: SliverList(
-                            delegate: SliverChildBuilderDelegate(
-                              (context, index) {
-                                final ch = sortedChapters[index];
-                                return ChapterListTile(
-                                  chapter: ch,
-                                  manga: manga!,
-                                  isRead: historyProvider.isChapterRead(ch.id),
-                                  isLastRead: lastRead?.chapterId == ch.id,
-                                );
-                              },
-                              childCount: sortedChapters.length,
+                          sliver: SliverOpacity(
+                            opacity: _pager.isLoading ? 0.4 : 1,
+                            sliver: SliverIgnorePointer(
+                              ignoring: _pager.isLoading,
+                              sliver: SliverList(
+                                delegate: SliverChildBuilderDelegate(
+                                  (context, index) {
+                                    final ch = chapters[index];
+                                    return ChapterListTile(
+                                      chapter: ch,
+                                      manga: manga!,
+                                      isRead: historyProvider.isChapterRead(ch.id),
+                                      isLastRead: lastRead?.chapterId == ch.id,
+                                    );
+                                  },
+                                  childCount: chapters.length,
+                                ),
+                              ),
                             ),
                           ),
                         ),
 
-                      if (!_isLoadingChapters) SliverToBoxAdapter(child: _buildPaginationBar()),
+                      SliverToBoxAdapter(child: _buildPaginationBar()),
 
                       if (manga != null)
                         SliverToBoxAdapter(
@@ -349,7 +384,7 @@ class _MangaDetailScreenState extends State<MangaDetailScreen> {
             duration: const Duration(milliseconds: 200),
             opacity: collapsed ? 1 : 0,
             child: ClipRect(
-              child: BackdropFilter(
+              child: BackdropFilter.grouped(
                 filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
                 child: Container(
                   decoration: const BoxDecoration(
@@ -369,7 +404,6 @@ class _MangaDetailScreenState extends State<MangaDetailScreen> {
             GlassIconButton(
               icon: Icons.arrow_back_rounded,
               tooltip: 'Kembali',
-              frosted: true,
               onTap: () => Navigator.pop(context),
             ),
             const SizedBox(width: 12),
@@ -390,14 +424,12 @@ class _MangaDetailScreenState extends State<MangaDetailScreen> {
               GlassIconButton(
                 icon: Icons.chat_bubble_outline_rounded,
                 tooltip: 'Komentar',
-                frosted: true,
                 onTap: _scrollToComments,
               ),
               const SizedBox(width: 8),
               GlassIconButton(
                 icon: isBookmarked ? Icons.bookmark_rounded : Icons.bookmark_border_rounded,
                 tooltip: isBookmarked ? 'Hapus bookmark' : 'Bookmark',
-                frosted: true,
                 active: isBookmarked,
                 onTap: onBookmark,
               ),
@@ -427,8 +459,7 @@ class _MangaDetailScreenState extends State<MangaDetailScreen> {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
       child: LiquidGlassContainer(
-        frosted: true,
-        blur: 24,
+        color: const Color(0x991C2038),
         borderRadius: AppRadius.xl,
         padding: const EdgeInsets.all(14),
         child: Column(
@@ -511,7 +542,7 @@ class _MangaDetailScreenState extends State<MangaDetailScreen> {
               ),
             ],
 
-            if (_chapters.isNotEmpty) ...[
+            if (_latestChapter != null || _pager.chapters.isNotEmpty) ...[
               const SizedBox(height: 14),
               Row(
                 children: [
@@ -523,11 +554,16 @@ class _MangaDetailScreenState extends State<MangaDetailScreen> {
                           if (hasResume) {
                             _openReader(manga, lastReadId, lastReadNumber ?? '');
                           } else {
-                            final first = _chapters.last;
-                            _openReader(manga, first.id, first.chapterNumber);
+                            _openFirstChapter(manga);
                           }
                         },
-                        icon: const Icon(Icons.play_arrow_rounded, size: 22),
+                        icon: _openingFirst
+                            ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                              )
+                            : const Icon(Icons.play_arrow_rounded, size: 22),
                         label: Text(
                           hasResume && (lastReadNumber?.isNotEmpty ?? false)
                               ? 'Lanjut Ch. $lastReadNumber'
@@ -640,10 +676,10 @@ class _MangaDetailScreenState extends State<MangaDetailScreen> {
   // ── Pagination ────────────────────────────────────────────────────────
 
   Widget _buildPaginationBar() {
-    if (_totalChapterPages <= 1) return const SizedBox.shrink();
+    if (!_pager.hasPrev && !_pager.hasNext) return const SizedBox.shrink();
 
-    final canBack = _chapterPage > 1 && !_isLoadingChapters;
-    final canNext = _chapterPage < _totalChapterPages && !_isLoadingChapters;
+    final busy = _pager.isLoading;
+    final estPages = _pager.estimatedTotalPages;
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 6, 16, 16),
@@ -653,36 +689,41 @@ class _MangaDetailScreenState extends State<MangaDetailScreen> {
           _buildPaginationBtn(
             icon: Icons.first_page_rounded,
             tooltip: 'Halaman pertama',
-            enabled: canBack,
-            onTap: () => _goToChapterPage(1),
+            enabled: _pager.hasPrev && !busy,
+            onTap: () => _changePage(_pager.first),
           ),
           const SizedBox(width: 8),
           _buildPaginationBtn(
             icon: Icons.chevron_left_rounded,
             tooltip: 'Sebelumnya',
-            enabled: canBack,
-            onTap: () => _goToChapterPage(_chapterPage - 1),
+            enabled: _pager.hasPrev && !busy,
+            onTap: () => _changePage(_pager.prev),
           ),
           const SizedBox(width: 8),
           LiquidGlassContainer(
             borderRadius: AppRadius.md,
             boxShadow: const [],
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
             child: Text.rich(
               TextSpan(
                 children: [
+                  const TextSpan(
+                    text: 'Hal. ',
+                    style: TextStyle(fontSize: 13, color: AppColors.textMuted),
+                  ),
                   TextSpan(
-                    text: '$_chapterPage',
+                    text: '${_pager.pageNumber}',
                     style: const TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.w800,
                       color: AppColors.textPrimary,
                     ),
                   ),
-                  TextSpan(
-                    text: ' / $_totalChapterPages',
-                    style: const TextStyle(fontSize: 13, color: AppColors.textMuted),
-                  ),
+                  if (estPages != null)
+                    TextSpan(
+                      text: ' / ±$estPages',
+                      style: const TextStyle(fontSize: 13, color: AppColors.textMuted),
+                    ),
                 ],
               ),
             ),
@@ -691,15 +732,17 @@ class _MangaDetailScreenState extends State<MangaDetailScreen> {
           _buildPaginationBtn(
             icon: Icons.chevron_right_rounded,
             tooltip: 'Berikutnya',
-            enabled: canNext,
-            onTap: () => _goToChapterPage(_chapterPage + 1),
+            enabled: _pager.hasNext && !busy,
+            onTap: () => _changePage(_pager.next),
           ),
           const SizedBox(width: 8),
+          // The API can't jump to the last page; the oldest chapters are
+          // page 1 of the reversed order instead.
           _buildPaginationBtn(
             icon: Icons.last_page_rounded,
-            tooltip: 'Halaman terakhir',
-            enabled: canNext,
-            onTap: () => _goToChapterPage(_totalChapterPages),
+            tooltip: 'Chapter terlama',
+            enabled: !busy && (!_pager.ascending || _pager.hasPrev),
+            onTap: () => _changePage(() => _pager.ascending ? _pager.first() : _pager.setAscending(true)),
           ),
         ],
       ),
@@ -725,6 +768,8 @@ class _MangaDetailScreenState extends State<MangaDetailScreen> {
 
 /// Heavily blurred cover art that fades out downward. Rasterised once and
 /// cached by the RepaintBoundary, so scrolling the page above it stays cheap.
+/// Blurred cover behind the header. Baked once into a small bitmap (see
+/// [BakedBlurImage]) so scrolling over it costs nothing extra per frame.
 class _AmbientCover extends StatelessWidget {
   final String imageUrl;
 
@@ -733,31 +778,7 @@ class _AmbientCover extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return RepaintBoundary(
-      child: ShaderMask(
-        shaderCallback: (rect) => const LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [Colors.white, Colors.white, Colors.transparent],
-          stops: [0.0, 0.45, 1.0],
-        ).createShader(rect),
-        blendMode: BlendMode.dstIn,
-        // ClipRect keeps the blur's spill inside the masked area, otherwise
-        // it leaks past the bottom edge as a hard line.
-        child: ClipRect(
-          child: Opacity(
-            opacity: 0.75,
-            child: ImageFiltered(
-              imageFilter: ImageFilter.blur(sigmaX: 28, sigmaY: 28, tileMode: TileMode.clamp),
-              child: AppNetworkImage(
-                imageUrl: imageUrl,
-                fit: BoxFit.cover,
-                alignment: Alignment.topCenter,
-                errorWidget: const SizedBox.shrink(),
-              ),
-            ),
-          ),
-        ),
-      ),
+      child: BakedBlurImage(imageUrl: imageUrl, sigma: 6, opacity: 0.75, fadeStart: 0.45),
     );
   }
 }

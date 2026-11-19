@@ -1,11 +1,14 @@
 import 'dart:async';
 import 'dart:math' as math;
-import 'dart:ui' show ImageFilter;
 
 import 'package:flutter/material.dart';
 import '../../core/constants/app_colors.dart';
 import '../../widgets/app_backdrop.dart';
+import '../../widgets/sakuga_progress.dart';
 import '../main_navigation_shell.dart';
+
+/// Startup work that reports its progress (0 to 1) as it goes.
+typedef SplashBootstrap = Future<void> Function(ValueChanged<double> report);
 
 /// Animated startup screen.
 ///
@@ -14,11 +17,12 @@ import '../main_navigation_shell.dart';
 ///   1. a magenta bloom opens behind the logo and a glass ring ripples out,
 ///   2. the logo lifts and settles,
 ///   3. the wordmark and tagline slide in,
-///   4. a slim glass progress track runs while [bootstrap] finishes,
-/// and finally fades through to the app.
+///   4. a Sakuga progress bar follows [bootstrap]'s real progress,
+/// and once the bar itself lands (its `sakuga:done`) fades through to the app.
 class SplashScreen extends StatefulWidget {
   /// Work to finish before leaving the splash (auth, bookmarks, history).
-  final Future<void> Function()? bootstrap;
+  /// It reports progress from 0 to 1 through the callback it is given.
+  final SplashBootstrap? bootstrap;
 
   const SplashScreen({super.key, this.bootstrap});
 
@@ -33,11 +37,8 @@ class _SplashScreenState extends State<SplashScreen>
     vsync: this,
     duration: const Duration(milliseconds: 1500),
   );
-  // Looping shimmer on the progress track while we wait.
-  late final AnimationController _loop = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 1100),
-  );
+  final SakugaProgressController _progress = SakugaProgressController();
+  final Completer<void> _barDone = Completer<void>();
 
   bool _left = false;
 
@@ -52,9 +53,17 @@ class _SplashScreenState extends State<SplashScreen>
 
   Future<void> _run() async {
     final work = _guard(widget.bootstrap);
-    _loop.repeat();
     await _intro.forward().orCancel.catchError((_) {});
     await work;
+    if (!mounted || _left) return;
+    // Done (or timed out): let the bar finish and wait for it to land.
+    _progress.set(1);
+    await _barDone.future.timeout(const Duration(seconds: 5), onTimeout: () {});
+    if (!mounted || _left) return;
+    // A beat so the landing (ドン, the check) reads before the page changes.
+    if (!MediaQuery.of(context).disableAnimations) {
+      await Future<void>.delayed(const Duration(milliseconds: 650));
+    }
     if (!mounted || _left) return;
     _left = true;
     Navigator.of(context).pushReplacement(
@@ -79,10 +88,13 @@ class _SplashScreenState extends State<SplashScreen>
   }
 
   /// Never let a slow/failed network call trap the user on the splash.
-  Future<void> _guard(Future<void> Function()? job) async {
+  Future<void> _guard(SplashBootstrap? job) async {
     if (job == null) return;
     try {
-      await job().timeout(const Duration(seconds: 8));
+      await job((n) {
+        // Never let a late report pull a finished bar backwards.
+        if (n > _progress.value) _progress.set(n);
+      }).timeout(const Duration(seconds: 8));
     } catch (e) {
       debugPrint('Splash bootstrap: $e');
     }
@@ -90,8 +102,9 @@ class _SplashScreenState extends State<SplashScreen>
 
   @override
   void dispose() {
+    // Releases the wait in _run (and its timeout timer) if we leave early.
+    if (!_barDone.isCompleted) _barDone.complete();
     _intro.dispose();
-    _loop.dispose();
     super.dispose();
   }
 
@@ -123,7 +136,7 @@ class _SplashScreenState extends State<SplashScreen>
       child: Scaffold(
         backgroundColor: Colors.transparent,
         body: AnimatedBuilder(
-          animation: Listenable.merge([_intro, _loop]),
+          animation: _intro,
           builder: (context, _) {
             final logoSize = startSize + (endSize - startSize) * lift.value;
             // Fill the screen so "center" matches the native splash's centre.
@@ -228,14 +241,27 @@ class _SplashScreenState extends State<SplashScreen>
                     ),
                   ),
 
-                  // Progress track at the bottom
-                  Positioned(
-                    bottom: mq.padding.bottom + 56,
-                    child: Opacity(
-                      opacity: bar.value,
-                      child: _GlassProgress(phase: _loop.value),
+                  // Sakuga progress at the bottom. Mounted when its turn in the
+                  // intro comes, so the ride starts from 0 where it can be seen;
+                  // until then the controller just holds the latest progress.
+                  if (bar.value > 0)
+                    Positioned(
+                      bottom: mq.padding.bottom + 12,
+                      child: Opacity(
+                        opacity: bar.value,
+                        child: Transform.translate(
+                          offset: Offset(0, 16 * (1 - bar.value)),
+                          child: SakugaProgress(
+                            controller: _progress,
+                            label: 'Memuat ngomik',
+                            width: math.min(280.0, mq.size.width - 48),
+                            onDone: () {
+                              if (!_barDone.isCompleted) _barDone.complete();
+                            },
+                          ),
+                        ),
+                      ),
                     ),
-                  ),
                 ],
               ),
             );
@@ -271,65 +297,6 @@ class _Wordmark extends StatelessWidget {
         height: 1.1,
       ),
       semanticsLabel: 'Ngomik',
-    );
-  }
-}
-
-/// Slim frosted track with a magenta comet sweeping across.
-class _GlassProgress extends StatelessWidget {
-  final double phase; // 0..1, looping
-
-  const _GlassProgress({required this.phase});
-
-  static const double _w = 120;
-  static const double _h = 6;
-  static const double _comet = 44;
-
-  @override
-  Widget build(BuildContext context) {
-    final x = -_comet + (_w + _comet) * Curves.easeInOut.transform(phase);
-    return Semantics(
-      label: 'Memuat',
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(_h),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
-          child: Container(
-            width: _w,
-            height: _h,
-            decoration: BoxDecoration(
-              color: const Color(0x591C2038),
-              border: Border.all(
-                color: Colors.white.withValues(alpha: 0.12),
-                width: 0.6,
-              ),
-              borderRadius: BorderRadius.circular(_h),
-            ),
-            child: Stack(
-              children: [
-                Positioned(
-                  left: x,
-                  top: 0,
-                  bottom: 0,
-                  width: _comet,
-                  child: const DecoratedBox(
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [
-                          Color(0x00E2288E),
-                          Color(0xFFE2288E),
-                          Color(0xFFFF6CB8),
-                        ],
-                        stops: [0.0, 0.7, 1.0],
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
     );
   }
 }

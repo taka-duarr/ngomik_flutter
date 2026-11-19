@@ -6,6 +6,7 @@ import '../../core/constants/app_colors.dart';
 import '../../core/constants/api_endpoints.dart';
 import '../../models/manga.dart';
 import '../../models/chapter.dart';
+import '../../services/chapter_pager.dart';
 import '../../services/shngm_api_service.dart';
 import '../../providers/history_provider.dart';
 import '../../providers/auth_provider.dart';
@@ -1004,46 +1005,33 @@ class _ChapterListBottomSheet extends StatefulWidget {
 }
 
 class _ChapterListBottomSheetState extends State<_ChapterListBottomSheet> {
-  final ShngmApiService _apiService = ShngmApiService();
-  List<Chapter> _chapters = [];
-  bool _isLoading = true;
-  String _searchQuery = '';
-  int _page = 1;
-  int _totalPages = 1;
-  int _totalRecords = 0;
-  bool _isAscending = false;
+  // Cursor-paginated; sort + search run on the server across all pages.
+  late final ChapterPager _pager = ChapterPager(mangaId: widget.mangaId, limit: 30)
+    ..addListener(_onPagerChanged);
 
   @override
   void initState() {
     super.initState();
-    _fetchChapters(1);
+    _pager.loadFirst();
   }
 
-  Future<void> _fetchChapters(int page) async {
-    setState(() => _isLoading = true);
-    final result = await _apiService.fetchChapterPage(widget.mangaId, page: page, pageSize: 30);
-    if (mounted) {
-      setState(() {
-        _chapters = result.chapters;
-        _page = result.page;
-        _totalPages = result.totalPages;
-        _totalRecords = result.totalRecords;
-        _isLoading = false;
-      });
-    }
+  void _onPagerChanged() {
+    if (mounted) setState(() {});
+  }
+
+  @override
+  void dispose() {
+    _pager
+      ..removeListener(_onPagerChanged)
+      ..dispose();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final filtered = _searchQuery.trim().isEmpty
-        ? _chapters
-        : _chapters.where((c) {
-            final q = _searchQuery.trim().toLowerCase();
-            return c.chapterNumber.toLowerCase().contains(q) ||
-                (c.chapterTitle != null && c.chapterTitle!.toLowerCase().contains(q));
-          }).toList();
-
-    final displayedChapters = _isAscending ? filtered.reversed.toList() : filtered;
+    final displayedChapters = _pager.chapters;
+    final isLoading = _pager.isLoading;
+    final estimated = _pager.estimatedTotalChapters;
 
     return LiquidGlassContainer(
       height: MediaQuery.of(context).size.height * 0.78,
@@ -1084,7 +1072,7 @@ class _ChapterListBottomSheetState extends State<_ChapterListBottomSheet> {
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        '${widget.mangaTitle} • $_totalRecords Chapter',
+                        estimated != null ? '${widget.mangaTitle} • ±$estimated Chapter' : widget.mangaTitle,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
@@ -1097,17 +1085,13 @@ class _ChapterListBottomSheetState extends State<_ChapterListBottomSheet> {
                 ),
                 // Sort Button
                 IconButton(
-                  tooltip: _isAscending ? 'Urutkan Terbaru' : 'Urutkan Terlama',
+                  tooltip: _pager.ascending ? 'Urutkan Terbaru' : 'Urutkan Terlama',
                   icon: Icon(
-                    _isAscending ? Icons.arrow_upward_rounded : Icons.arrow_downward_rounded,
+                    _pager.ascending ? Icons.arrow_upward_rounded : Icons.arrow_downward_rounded,
                     color: AppColors.primaryLight,
                     size: 20,
                   ),
-                  onPressed: () {
-                    setState(() {
-                      _isAscending = !_isAscending;
-                    });
-                  },
+                  onPressed: () => _pager.setAscending(!_pager.ascending),
                 ),
                 IconButton(
                   icon: const Icon(Icons.close_rounded, color: Colors.white70),
@@ -1130,7 +1114,7 @@ class _ChapterListBottomSheetState extends State<_ChapterListBottomSheet> {
                 border: Border.all(color: Colors.white.withValues(alpha: 0.15)),
               ),
               child: TextField(
-                onChanged: (val) => setState(() => _searchQuery = val),
+                onChanged: _pager.setSearch,
                 style: const TextStyle(fontSize: 13, color: Colors.white),
                 decoration: const InputDecoration(
                   hintText: 'Cari nomor chapter...',
@@ -1148,7 +1132,7 @@ class _ChapterListBottomSheetState extends State<_ChapterListBottomSheet> {
 
           // Chapter List
           Expanded(
-            child: _isLoading
+            child: isLoading
                 ? const Center(child: GoogleDotsLoading(dotSize: 10, jumpHeight: 14))
                 : displayedChapters.isEmpty
                     ? const Center(
@@ -1249,8 +1233,8 @@ class _ChapterListBottomSheetState extends State<_ChapterListBottomSheet> {
                       ),
           ),
 
-          // Pagination Controls if multiple pages
-          if (_totalPages > 1) ...[
+          // Pagination (cursor based: next/prev only, no total page count)
+          if (_pager.hasPrev || _pager.hasNext) ...[
             const Divider(height: 1, color: AppColors.border),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -1258,16 +1242,18 @@ class _ChapterListBottomSheetState extends State<_ChapterListBottomSheet> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   TextButton.icon(
-                    onPressed: _page > 1 && !_isLoading ? () => _fetchChapters(_page - 1) : null,
+                    onPressed: _pager.hasPrev && !isLoading ? _pager.prev : null,
                     icon: const Icon(Icons.chevron_left_rounded),
                     label: const Text('Prev Page'),
                   ),
                   Text(
-                    'Hal $_page / $_totalPages',
+                    _pager.estimatedTotalPages != null
+                        ? 'Hal ${_pager.pageNumber} / ±${_pager.estimatedTotalPages}'
+                        : 'Hal ${_pager.pageNumber}',
                     style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
                   ),
                   TextButton.icon(
-                    onPressed: _page < _totalPages && !_isLoading ? () => _fetchChapters(_page + 1) : null,
+                    onPressed: _pager.hasNext && !isLoading ? _pager.next : null,
                     icon: const Icon(Icons.chevron_right_rounded),
                     label: const Text('Next Page'),
                   ),

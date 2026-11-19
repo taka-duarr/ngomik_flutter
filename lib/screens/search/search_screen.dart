@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../core/constants/app_colors.dart';
 import '../../providers/manga_provider.dart';
+import '../../widgets/sakuga_search_field.dart';
 import '../../widgets/app_backdrop.dart';
 import '../../widgets/glass_widgets.dart';
 import '../../widgets/liquid_glass_container.dart';
@@ -93,7 +94,7 @@ class _SearchScreenState extends State<SearchScreen> {
                 child: Row(
                   children: [
                     Expanded(
-                      child: GlassSearchField(
+                      child: SakugaSearchField(
                         controller: _searchCtrl,
                         hintText: 'Judul manga, manhwa, manhua…',
                         onSubmitted: (_) => _executeSearch(),
